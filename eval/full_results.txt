@@ -1,0 +1,17 @@
+| Model | Method | Dataset | mIoU | AuPRC | FPR95 |
+|---|---|---|---|---|---|
+| ERFNet | MSP | Fishyscapes Static | - | 7.47 | 41.84 |
+| ERFNet | MAXLOGIT | Fishyscapes Static | - | 9.50 | 40.30 |
+| ERFNet | MAXENTROPY | Fishyscapes Static | - | 8.84 | 41.55 |
+| ERFNet | MSP | Fishyscapes Lost & Found | - | 1.75 | 50.59 |
+| ERFNet | MAXLOGIT | Fishyscapes Lost & Found | - | 3.30 | 45.49 |
+| ERFNet | MAXENTROPY | Fishyscapes Lost & Found | - | 2.58 | 50.16 |
+| ERFNet | MSP | RoadAnomaly | - | 12.42 | 82.58 |
+| ERFNet | MAXLOGIT | RoadAnomaly | - | 15.58 | 73.25 |
+| ERFNet | MAXENTROPY | RoadAnomaly | - | 12.67 | 82.75 |
+| ERFNet | MSP | RoadAnomaly21 | - | 29.10 | 62.55 |
+| ERFNet | MAXLOGIT | RoadAnomaly21 | - | 38.32 | 59.34 |
+| ERFNet | MAXENTROPY | RoadAnomaly21 | - | 30.97 | 62.66 |
+| ERFNet | MSP | RoadObsticle21 | - | 2.71 | 65.22 |
+| ERFNet | MAXLOGIT | RoadObsticle21 | - | 4.63 | 48.44 |
+| ERFNet | MAXENTROPY | RoadObsticle21 | - | 3.04 | 65.91 |

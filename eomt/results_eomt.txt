@@ -1,0 +1,20 @@
+
+Dataset: Fishyscapes_Static    Method: MSP    AUPRC score: 2.19   FPR@TPR95: 96.25
+Dataset: Fishyscapes_Static    Method: MAXLOGIT    AUPRC score: 2.20   FPR@TPR95: 96.01
+Dataset: Fishyscapes_Static    Method: MAXENTROPY    AUPRC score: 2.21   FPR@TPR95: 95.47
+
+Dataset: Fishyscapes_Lost_&_Found    Method: MSP    AUPRC score: 0.25   FPR@TPR95: 94.32
+Dataset: Fishyscapes_Lost_&_Found    Method: MAXLOGIT    AUPRC score: 0.25   FPR@TPR95: 93.78
+Dataset: Fishyscapes_Lost_&_Found    Method: MAXENTROPY    AUPRC score: 0.26   FPR@TPR95: 93.50
+
+Dataset: RoadAnomaly    Method: MSP    AUPRC score: 11.22   FPR@TPR95: 95.61
+Dataset: RoadAnomaly    Method: MAXLOGIT    AUPRC score: 11.32   FPR@TPR95: 95.98
+Dataset: RoadAnomaly    Method: MAXENTROPY    AUPRC score: 11.44   FPR@TPR95: 94.75
+
+Dataset: RoadAnomaly21    Method: MSP    AUPRC score: 12.27   FPR@TPR95: 97.62
+Dataset: RoadAnomaly21    Method: MAXLOGIT    AUPRC score: 12.43   FPR@TPR95: 97.53
+Dataset: RoadAnomaly21    Method: MAXENTROPY    AUPRC score: 12.67   FPR@TPR95: 96.84
+
+Dataset: RoadObsticle21    Method: MSP    AUPRC score: 0.61   FPR@TPR95: 85.68
+Dataset: RoadObsticle21    Method: MAXLOGIT    AUPRC score: 0.62   FPR@TPR95: 87.17
+Dataset: RoadObsticle21    Method: MAXENTROPY    AUPRC score: 0.62   FPR@TPR95: 89.86

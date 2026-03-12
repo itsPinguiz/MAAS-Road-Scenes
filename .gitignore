@@ -1,3 +1,8 @@
+Datasets/
+trained_models/
+saved_logits/
+TASKS.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

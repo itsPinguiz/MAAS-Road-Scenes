@@ -613,7 +613,10 @@ class LightningModule(lightning.LightningModule):
         for i in range(len(imgs)):
             img = imgs[i]
             new_h, new_w = self.scale_img_size_semantic(img.shape[-2:])
-            pil_img = Image.fromarray(img.permute(1, 2, 0).cpu().numpy())
+            numpy_img = img.permute(1, 2, 0).cpu().numpy()
+            if numpy_img.dtype != np.uint8:
+                numpy_img = (numpy_img * 255.0).astype(np.uint8)
+            pil_img = Image.fromarray(numpy_img)
             resized_img = pil_img.resize((new_w, new_h), Image.BILINEAR)
             resized_img = (
                 torch.from_numpy(np.array(resized_img)).permute(2, 0, 1).to(img.device)

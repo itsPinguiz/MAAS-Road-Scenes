@@ -12,6 +12,21 @@ from argparse import ArgumentParser
 from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barcode
 from sklearn.metrics import roc_auc_score, roc_curve, auc, precision_recall_curve, average_precision_score
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
+import torch.nn.functional as F
+
+def compute_msp_anomaly_score(logits):
+    probs = F.softmax(logits, dim=1)
+    msp, _ = torch.max(probs, dim=1)
+    return 1.0 - msp 
+
+def compute_maxlogit_anomaly_score(logits):
+    max_logit, _ = torch.max(logits, dim=1)
+    return -max_logit
+
+def compute_maxentropy_anomaly_score(logits):
+    probs = F.softmax(logits, dim=1)
+    entropy = -torch.sum(probs * torch.log(probs + 1e-12), dim=1)
+    return entropy
 
 seed = 42
 
@@ -58,6 +73,7 @@ def main():
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--method', default='msp', choices=['msp', 'maxlogit', 'maxentropy'], help='Anomaly scoring method to use')
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
@@ -97,10 +113,16 @@ def main():
     for path in glob.glob(os.path.expanduser(str(args.input[0]))):
         print(path)
         images = input_transform((Image.open(path).convert('RGB'))).unsqueeze(0).float().cuda()
-        images = images.permute(0,3,1,2)
         with torch.no_grad():
             result = model(images)
-        anomaly_result = 1.0 - np.max(result.squeeze(0).data.cpu().numpy(), axis=0)            
+            
+        if args.method == 'msp':
+            anomaly_result = compute_msp_anomaly_score(result).squeeze(0).data.cpu().numpy()
+        elif args.method == 'maxlogit':
+            anomaly_result = compute_maxlogit_anomaly_score(result).squeeze(0).data.cpu().numpy()
+        elif args.method == 'maxentropy':
+            anomaly_result = compute_maxentropy_anomaly_score(result).squeeze(0).data.cpu().numpy()
+
         pathGT = path.replace("images", "labels_masks")                
         if "RoadObsticle21" in pathGT:
            pathGT = pathGT.replace("webp", "png")
@@ -153,10 +175,11 @@ def main():
     prc_auc = average_precision_score(val_label, val_out)
     fpr = fpr_at_95_tpr(val_out, val_label)
 
-    print(f'AUPRC score: {prc_auc*100.0}')
-    print(f'FPR@TPR95: {fpr*100.0}')
+    print(f'Method: {args.method.upper()}')
+    print(f'AUPRC score: {prc_auc*100.0:.2f}')
+    print(f'FPR@TPR95: {fpr*100.0:.2f}')
 
-    file.write(('    AUPRC score:' + str(prc_auc*100.0) + '   FPR@TPR95:' + str(fpr*100.0) ))
+    file.write((f'    Method: {args.method.upper()}    AUPRC score: {prc_auc*100.0:.2f}   FPR@TPR95: {fpr*100.0:.2f}'))
     file.close()
 
 if __name__ == '__main__':
