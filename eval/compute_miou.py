@@ -2,10 +2,14 @@ import os
 import glob
 import subprocess
 import re
-
 import sys
+import argparse
 
-erfnet_python = ".venv/bin/python"
+# Add parent directory to path to import the update table utility
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from update_table import update_table_entry
+
+erfnet_python = ".venv_eval/bin/python"
 eomt_python = "../eomt/.venv_eomt/bin/python"
 cityscapes_val_images = "../gtFine_trainvaltest/val/*/*_gtFine_labelIds.png" # Assuming structure of Cityscapes labels
 import argparse
@@ -171,7 +175,12 @@ def write_and_run():
     print("Running ERFNet Evaluation...")
     erfnet_res = subprocess.run([erfnet_python, "eval_miou_erfnet.py"], capture_output=True, text=True)
     if "ERFNet_mIoU_FINAL" in erfnet_res.stdout:
-        print(re.search(r"ERFNet_mIoU_FINAL: ([0-9.]+)", erfnet_res.stdout).group(0))
+        erfnet_miou = re.search(r"ERFNet_mIoU_FINAL: ([0-9.]+)", erfnet_res.stdout).group(1)
+        print(f"ERFNet mIoU: {erfnet_miou}")
+        
+        # Update TABLE.md directly for all methods of ERFNET (since mIoU is dataset-wide, not method-dependent)
+        for method in ['MSP', 'MaxLogit', 'Max Entropy']:
+            update_table_entry(model="ERFNET", method=method, miou=erfnet_miou)
     else:
         print("ERFNet failed:")
         print(erfnet_res.stderr)
@@ -179,7 +188,12 @@ def write_and_run():
     print("Running EoMT Evaluation...")
     eomt_res = subprocess.run([eomt_python, "eval_miou_eomt.py"], capture_output=True, text=True)
     if "EoMT_mIoU_FINAL" in eomt_res.stdout:
-        print(re.search(r"EoMT_mIoU_FINAL: ([0-9.]+)", eomt_res.stdout).group(0))
+        eomt_miou = re.search(r"EoMT_mIoU_FINAL: ([0-9.]+)", eomt_res.stdout).group(1)
+        print(f"EoMT mIoU: {eomt_miou}")
+        
+        # Update TABLE.md directly for all methods of EoMT (since mIoU is dataset-wide, not method-dependent)
+        for method in ['MSP', 'MaxLogit', 'Max Entropy']:
+            update_table_entry(model="EoMT", method=method, miou=eomt_miou)
     else:
         print("EoMT failed:")
         print(eomt_res.stderr)

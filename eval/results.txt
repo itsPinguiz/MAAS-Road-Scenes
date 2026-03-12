@@ -17,3 +17,21 @@
     Method: MSP    AUPRC score: 2.71   FPR@TPR95: 65.22
     Method: MAXLOGIT    AUPRC score: 4.63   FPR@TPR95: 48.44
     Method: MAXENTROPY    AUPRC score: 3.04   FPR@TPR95: 65.91
+    Method: MSP    AUPRC score: 12.42   FPR@TPR95: 82.58
+    Method: MSP    AUPRC score: 12.42   FPR@TPR95: 82.58
+    Method: MSP    AUPRC score: 7.47   FPR@TPR95: 41.84
+    Method: MSP    AUPRC score: 7.47   FPR@TPR95: 41.84
+    Method: MAXLOGIT    AUPRC score: 9.50   FPR@TPR95: 40.30
+    Method: MAXENTROPY    AUPRC score: 8.84   FPR@TPR95: 41.55
+    Method: MSP    AUPRC score: 1.75   FPR@TPR95: 50.59
+    Method: MAXLOGIT    AUPRC score: 3.30   FPR@TPR95: 45.49
+    Method: MAXENTROPY    AUPRC score: 2.58   FPR@TPR95: 50.16
+    Method: MSP    AUPRC score: 12.42   FPR@TPR95: 82.58
+    Method: MAXLOGIT    AUPRC score: 15.58   FPR@TPR95: 73.25
+    Method: MAXENTROPY    AUPRC score: 12.67   FPR@TPR95: 82.75
+    Method: MSP    AUPRC score: 29.10   FPR@TPR95: 62.55
+    Method: MAXLOGIT    AUPRC score: 38.32   FPR@TPR95: 59.34
+    Method: MAXENTROPY    AUPRC score: 30.97   FPR@TPR95: 62.66
+    Method: MSP    AUPRC score: 2.71   FPR@TPR95: 65.22
+    Method: MAXLOGIT    AUPRC score: 4.63   FPR@TPR95: 48.44
+    Method: MAXENTROPY    AUPRC score: 3.04   FPR@TPR95: 65.91

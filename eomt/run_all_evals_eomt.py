@@ -2,6 +2,11 @@ import os
 import subprocess
 import re
 import sys
+import argparse
+
+# Add parent directory to path to import the update table utility
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from update_table import update_table_entry
 
 # Define datasets and their corresponding image paths
 datasets = {
@@ -51,7 +56,6 @@ for dataset_name, dataset_path in datasets.items():
                 auprc_dict[method_parsed] = match.group(2)
                 fpr_dict[method_parsed] = match.group(3)
 
-    for method in methods:
         results.append({
             'Model': model,
             'Method': method.upper(),
@@ -61,6 +65,14 @@ for dataset_name, dataset_path in datasets.items():
             'FPR95': fpr_dict[method]
         })
         print(f"-> Method: {method.upper()} -> AUPRC: {auprc_dict[method]}, FPR95: {fpr_dict[method]}")
+        
+        # Update TABLE.md directly if parsing succeeded
+        if auprc_dict[method] != "N/A" and fpr_dict[method] != "N/A":
+            # For logging purposes we use uppercase METHOD, except maxentropy which is 'Max Entropy' in table
+            table_method = 'Max Entropy' if method == 'maxentropy' else method.upper()
+            table_method = 'RbA' if method == 'rba' else table_method
+            update_table_entry(model=model, method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
+            
     print("\n")
 
 # Format output as Markdown Table based on user rules

@@ -2,6 +2,11 @@ import os
 import subprocess
 import re
 import sys
+import argparse
+
+# Add parent directory to path to import the update table utility
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from update_table import update_table_entry
 
 # Define datasets and their corresponding image paths
 datasets = {
@@ -24,7 +29,7 @@ for dataset_name, dataset_path in datasets.items():
     for method in methods:
         print(f"Running evaluation for Dataset: {dataset_name}, Method: {method.upper()}...")
         cmd = [
-            ".venv/bin/python", "evalAnomaly.py",
+            ".venv_eval/bin/python", "evalAnomaly.py",
             "--input", dataset_path,
             "--method", method
         ]
@@ -60,6 +65,10 @@ for dataset_name, dataset_path in datasets.items():
             'FPR95': fpr
         })
         print(f"-> AUPRC: {auprc}, FPR95: {fpr}\n")
+        
+        # Update the main TABLE.md directly
+        if auprc != "N/A" and fpr != "N/A":
+            update_table_entry(model=model, method=method, dataset=dataset_name, miou='-', auprc=auprc, fpr95=fpr)
 
 # Format output as Markdown Table based on user rules
 markdown_table = "| Model | Method | Dataset | mIoU | AuPRC | FPR95 |\n"

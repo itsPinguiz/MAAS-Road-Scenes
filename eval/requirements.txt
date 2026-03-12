@@ -1,0 +1,15 @@
+# Base packages required by the README:
+numpy
+matplotlib
+Pillow
+torchvision
+visdom
+ood-metrics
+opencv-python
+
+# Note:
+# PyTorch is required but heavily depends on the system's CUDA version.
+# To install PyTorch specifically for your system, please follow the official guide:
+# https://pytorch.org/get-started/locally/
+# Example for CUDA 11.8: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch
