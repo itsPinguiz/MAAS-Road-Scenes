@@ -11,8 +11,7 @@ from update_table import update_table_entry
 
 erfnet_python = ".venv_eval/bin/python"
 eomt_python = "../eomt/.venv_eomt/bin/python"
-cityscapes_val_images = "../gtFine_trainvaltest/val/*/*_gtFine_labelIds.png" # Assuming structure of Cityscapes labels
-import argparse
+cityscapes_val_images = "../gtFine_trainvaltest/gtFine/val/*/*_gtFine_labelIds.png" # Assuming structure of Cityscapes labels
 
 # The simplest way to evaluate both is to write a temporary sub-script that loads the model,
 # processes the validation set using standard transforms, and computes mIoU, then call it for each model.
@@ -52,7 +51,7 @@ def main():
 
     model.eval()
     
-    val_images = glob.glob("../leftImg8bit_trainvaltest/val/*/*.png")
+    val_images = glob.glob("../leftImg8bit_trainvaltest/leftImg8bit/val/*/*.png")
     
     iouEvalVal = iouEval(20, ignoreIndex=19) # 19 is ignored index in eval_iou mapping usually
     
@@ -63,7 +62,7 @@ def main():
     
     with torch.no_grad():
         for i, img_path in enumerate(val_images):
-            gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest').replace('leftImg8bit.png', 'gtFine_labelIds.png')
+            gt_path = img_path.replace('leftImg8bit_trainvaltest/leftImg8bit', 'gtFine_trainvaltest/gtFine').replace('leftImg8bit.png', 'gtFine_labelIds.png')
             
             img = Image.open(img_path).convert('RGB')
             gt = Image.open(gt_path)
@@ -122,7 +121,7 @@ def main():
     model = model.to(device)
     model.eval()
     
-    val_images = glob.glob("../leftImg8bit_trainvaltest/val/*/*.png")
+    val_images = glob.glob("../leftImg8bit_trainvaltest/leftImg8bit/val/*/*.png")
     
     print("Evaluating EoMT on", len(val_images), "images...")
     
@@ -130,7 +129,7 @@ def main():
     
     with torch.no_grad():
         for i, img_path in enumerate(val_images):
-            gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest').replace('leftImg8bit.png', 'gtFine_labelIds.png')
+            gt_path = img_path.replace('leftImg8bit_trainvaltest/leftImg8bit', 'gtFine_trainvaltest/gtFine').replace('leftImg8bit.png', 'gtFine_labelIds.png')
             
             img_np = np.array(Image.open(img_path).convert('RGB'))
             gt_np = np.array(Image.open(gt_path))
