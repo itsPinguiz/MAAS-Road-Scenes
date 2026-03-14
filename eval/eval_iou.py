@@ -89,8 +89,17 @@ def main(args):
 
         with torch.no_grad():
             outputs = model(img_t)
-
-        iouEvalVal.addBatch(outputs.max(1)[1].unsqueeze(1).data, gt_t)
+            
+        # 1. Estraiamo la predizione (indice della classe con probabilità più alta)
+        pred = outputs.max(1)[1].unsqueeze(1).data
+        
+        # 2. FIX CUDA: Assicuriamoci che nessun valore superi NUM_CLASSES - 1 (19)
+        # Sostituiamo eventuali valori strani (come 255) con l'indice di ignoranza (IGNORE_INDEX)
+        gt_t[gt_t >= NUM_CLASSES] = IGNORE_INDEX
+        pred[pred >= NUM_CLASSES] = IGNORE_INDEX
+        
+        # 3. Ora possiamo passare i tensori sicuri alla funzione di valutazione
+        iouEvalVal.addBatch(pred, gt_t)
 
     iouVal, iou_classes = iouEvalVal.getIoU()
 
