@@ -3,6 +3,7 @@ import subprocess
 import re
 import sys
 import argparse
+from tqdm import tqdm
 
 # Add parent directory to path to import the update table utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,64 +23,60 @@ model = 'ERFNet'
 
 results = []
 
-print("Starting bulk evaluation...")
-print(f"Total combinations to test: {len(datasets) * len(methods)}\n")
+# Pre-calculate all combinations to feed into tqdm
+combinations = [(d_name, d_path, m) for d_name, d_path in datasets.items() for m in methods]
 
-for dataset_name, dataset_path in datasets.items():
-    for method in methods:
-        print(f"Running evaluation for Dataset: {dataset_name}, Method: {method.upper()}...")
-        cmd = [
-            sys.executable, "evalAnomaly.py",
-            "--input", dataset_path,
-            "--method", method
-        ]
+print(f"Starting bulk evaluation for {model}...")
+
+# Initialize tqdm progress bar
+pbar = tqdm(combinations, desc="Evaluating", unit="eval")
+
+for dataset_name, dataset_path, method in pbar:
+    # Update progress bar description to show current dataset and method
+    pbar.set_description(f"Eval: {dataset_name} [{method.upper()}]")
+    
+    cmd = [
+        sys.executable, "evalAnomaly.py",
+        "--input", dataset_path,
+        "--method", method
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        # Use tqdm.write instead of print to avoid breaking the progress bar visual
+        tqdm.write(f"\nError running eval on {dataset_name} with {method.upper()}:", file=sys.stderr)
+        tqdm.write(result.stderr, file=sys.stderr)
+        continue
         
-        # We print stderr as it runs to show progress (evalAnomaly.py doesn't print much, but just in case)
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            print(f"Error running eval on {dataset_name} with {method}:", file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
-            continue
-            
-        auprc = "N/A"
-        fpr = "N/A"
-        
-        # Parse output for metrics
-        for line in result.stdout.split('\n'):
-            if "AUPRC score:" in line:
-                match = re.search(r"AUPRC score:\s*([0-9.]+)", line)
-                if match:
-                    auprc = match.group(1)
-            if "FPR@TPR95:" in line:
-                match = re.search(r"FPR@TPR95:\s*([0-9.]+)", line)
-                if match:
-                    fpr = match.group(1)
-                    
-        results.append({
-            'Model': model,
-            'Method': method.upper(),
-            'Dataset': dataset_name,
-            'mIoU': '-',
-            'AuPRC': auprc,
-            'FPR95': fpr
-        })
-        print(f"-> AUPRC: {auprc}, FPR95: {fpr}\n")
-        
-        # Update the main TABLE.md directly
-        if auprc != "N/A" and fpr != "N/A":
-            update_table_entry(model=model, method=method, dataset=dataset_name, miou='-', auprc=auprc, fpr95=fpr)
+    auprc = "N/A"
+    fpr = "N/A"
+    
+    # Parse output for metrics
+    for line in result.stdout.split('\n'):
+        if "AUPRC score:" in line:
+            match = re.search(r"AUPRC score:\s*([0-9.]+)", line)
+            if match:
+                auprc = match.group(1)
+        if "FPR@TPR95:" in line:
+            match = re.search(r"FPR@TPR95:\s*([0-9.]+)", line)
+            if match:
+                fpr = match.group(1)
+                
+    results.append({
+        'Model': model,
+        'Method': method.upper(),
+        'Dataset': dataset_name,
+        'mIoU': '-',
+        'AuPRC': auprc,
+        'FPR95': fpr
+    })
+    
+    # Update the right side of the progress bar with the latest metrics
+    pbar.set_postfix({'AUPRC': auprc, 'FPR95': fpr})
+    
+    # Update the main TABLE.md directly
+    if auprc != "N/A" and fpr != "N/A":
+        update_table_entry(model=model, method=method, dataset=dataset_name, miou='-', auprc=auprc, fpr95=fpr)
 
-# Format output as Markdown Table based on user rules
-markdown_table = "| Model | Method | Dataset | mIoU | AuPRC | FPR95 |\n"
-markdown_table += "|---|---|---|---|---|---|\n"
-for res in results:
-    markdown_table += f"| {res['Model']} | {res['Method']} | {res['Dataset']} | {res['mIoU']} | {res['AuPRC']} | {res['FPR95']} |\n"
-
-print("\n--- Final Evaluation Results ---\n")
-print(markdown_table)
-
-with open('full_results.txt', 'w') as f:
-    f.write(markdown_table)
-
-print("\nResults successfully saved to full_results.txt")
+print(f"\nUpdated TABLE.md with the results for {model}.")

@@ -21,7 +21,7 @@ def load_eomt_model(ckpt_path):
     from models.eomt import EoMT
     from training.mask_classification_semantic import MaskClassificationSemantic
 
-    print(f"Instantiating model with parameters from checkpoint...")
+    print(f"Instantiating EoMT with parameters from checkpoint...")
     
     # Parametri esatti estratti dal file .ckpt
     img_size = (1024, 1024)
@@ -58,7 +58,6 @@ def load_eomt_model(ckpt_path):
         
         # Mettiamo strict=True. Se fallisce ora, significa che abbiamo ancora un mismatch, ma con questi parametri non dovrebbe!
         model.load_state_dict(state_dict, strict=True)
-        print("Model weights loaded SUCCESSFULLY and STRICTLY.")
     except Exception as e:
         print(f"Error loading weights: {e}")
         # Fallback senza strict nel caso ci siano chiavi extra non importanti, ma avvisiamo l'utente
@@ -99,8 +98,6 @@ def main():
             for file in files:
                 if file.endswith("leftImg8bit.png"):
                     image_paths.append(os.path.join(root, file))
-
-    print(f"DEBUG: Trovate {len(image_paths)} immagini 'leftImg8bit.png' nella cartella 'val'.")
 
     if len(image_paths) == 0:
         print(f"ERRORE CRITICO: Nessuna immagine trovata in {args.datadir}")
@@ -153,12 +150,21 @@ def main():
         del dense_logits, preds, img_tensor, label_tensor
         torch.cuda.empty_cache()
 
-    print(f"Inizio calcolo mIoU su {valid_images_count} immagini valide...")
-    
     # Calcola il risultato finale
     mIoU = metric.compute().item()
     print("=======================================")
     print(f"EoMT_mIoU_FINAL: {mIoU * 100:.2f}%")
+
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from update_table import update_table_entry
+    
+    miou_str = f"{mIoU * 100:.2f}"
+    # Aggiorniamo la colonna mIoU per tutti i metodi di EoMT (incluso RbA)
+    for method in ['MSP', 'MaxLogit', 'Max Entropy', 'RbA']:
+        update_table_entry(model="EoMT", method=method, miou=miou_str)
+    
+    print("Tabella TABLE.md aggiornata con successo con la mIoU di EoMT!")
 
 if __name__ == '__main__':
     main()

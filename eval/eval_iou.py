@@ -119,6 +119,17 @@ def main(args):
     print("=======================================")
     print(f"ERFNet_mIoU_FINAL: {iouVal.item() * 100:.2f}%")
 
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from update_table import update_table_entry
+    
+    miou_str = f"{iouVal.item() * 100:.2f}"
+    # Aggiorniamo la colonna mIoU per tutti i metodi di ERFNet
+    for method in ['MSP', 'MaxLogit', 'Max Entropy']:
+        update_table_entry(model="ERFNET", method=method, miou=miou_str)
+    
+    print("Tabella TABLE.md aggiornata con successo con la mIoU di ERFNet!")
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--loadDir', default="../trained_models/")
