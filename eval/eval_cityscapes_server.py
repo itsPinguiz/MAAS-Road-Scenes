@@ -67,8 +67,6 @@ def main(args):
     modelpath = args.loadDir + args.loadModel
     weightspath = args.loadDir + args.loadWeights
 
-    print ("Loading model: " + modelpath)
-    print ("Loading weights: " + weightspath)
 
     #Import ERFNet model from the folder
     #Net = importlib.import_module(modelpath.replace("/", "."), "ERFNet")

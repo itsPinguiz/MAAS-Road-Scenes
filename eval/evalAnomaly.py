@@ -85,9 +85,6 @@ def main():
     modelpath = args.loadDir + args.loadModel
     weightspath = args.loadDir + args.loadWeights
 
-    print ("Loading model: " + modelpath)
-    print ("Loading weights: " + weightspath)
-
     model = ERFNet(NUM_CLASSES)
 
     if (not args.cpu):

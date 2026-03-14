@@ -39,17 +39,13 @@ def load_my_state_dict(model, state_dict):
 def main(args):
     modelpath = os.path.join(args.loadDir, args.loadModel)
     weightspath = os.path.join(args.loadDir, args.loadWeights)
-
-    print("Loading model: " + modelpath)
-    print("Loading weights: " + weightspath)
-
+    
     model = ERFNet(NUM_CLASSES)
 
     if not args.cpu:
         model = torch.nn.DataParallel(model).cuda()
 
     model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
-    print("Model and weights LOADED successfully")
     model.eval()
 
     # Ricerca infallibile con os.walk (come fatto in EoMT)
@@ -59,8 +55,6 @@ def main(args):
             for file in files:
                 if file.endswith("leftImg8bit.png"):
                     image_paths.append(os.path.join(root, file))
-
-    print(f"DEBUG: Trovate {len(image_paths)} immagini 'leftImg8bit.png' nella cartella 'val'.")
 
     if len(image_paths) == 0:
         print(f"ERRORE CRITICO: Nessuna immagine trovata in {args.datadir}")
