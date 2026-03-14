@@ -13,6 +13,9 @@ from sklearn.metrics import average_precision_score
 from tqdm import tqdm
 
 from training.lightning_module import LightningModule
+from models.vit import ViT
+from models.eomt import EoMT
+from training.mask_classification_semantic import MaskClassificationSemantic
 
 seed = 42
 random.seed(seed)
