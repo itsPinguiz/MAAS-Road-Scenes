@@ -20,8 +20,6 @@ def load_eomt_model(ckpt_path):
     from models.vit import ViT
     from models.eomt import EoMT
     from training.mask_classification_semantic import MaskClassificationSemantic
-
-    print(f"Instantiating EoMT with parameters from checkpoint...")
     
     # Parametri esatti estratti dal file .ckpt
     img_size = (1024, 1024)
@@ -77,6 +75,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--ckpt_path', default="../trained_models/epoch_106-step_19902_eomt.ckpt")
     parser.add_argument('--device', default='cuda:0', help='Device to use for computation')
+    parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     args = parser.parse_args()
 
     model = load_eomt_model(args.ckpt_path)
@@ -119,7 +118,7 @@ def main():
     for k, v in cityscapes_mapping.items():
         mapping_256[k] = v
 
-    for img_path in tqdm(image_paths, desc="Evaluating images"):
+    for img_path in tqdm(image_paths, desc="Evaluating images", disable=args.quiet):
         # Ora cerchiamo il suffisso corretto che hai mostrato nel terminale: '_labelIds.png'
         gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
                           .replace('leftImg8bit', 'gtFine') \
@@ -152,8 +151,17 @@ def main():
 
     # Calcola il risultato finale
     mIoU = metric.compute().item()
-    print("=======================================")
-    print(f"EoMT_mIoU_FINAL: {mIoU * 100:.2f}%")
+    miou_val = mIoU * 100
+    if args.quiet:
+        print(f"[Metrics] Model: EoMT, Dataset: Cityscapes, Method: mIoU, mIoU: {miou_val:.2f}%")
+    else:
+        print("\n=======================================")
+        print(f"Model:   EoMT")
+        print(f"Dataset: Cityscapes")
+        print(f"Method:  N/A (mIoU)")
+        print("---------------------------------------")
+        print(f"mIoU:    {miou_val:.2f}%")
+        print("=======================================\n")
 
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

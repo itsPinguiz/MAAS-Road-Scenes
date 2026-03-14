@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 from ood_metrics import fpr_at_95_tpr
 from sklearn.metrics import average_precision_score
+from tqdm import tqdm
 
 from training.lightning_module import LightningModule
 
@@ -44,12 +45,6 @@ import importlib
 from huggingface_hub import hf_hub_download
 
 def load_eomt_model(ckpt_path):
-    import torch
-    from models.vit import ViT
-    from models.eomt import EoMT
-    from training.mask_classification_semantic import MaskClassificationSemantic
-
-    print(f"Instantiating model with parameters from checkpoint...")
     
     # Parametri esatti estratti dal file .ckpt
     img_size = (1024, 1024)
@@ -86,7 +81,6 @@ def load_eomt_model(ckpt_path):
         
         # Mettiamo strict=True. Se fallisce ora, significa che abbiamo ancora un mismatch, ma con questi parametri non dovrebbe!
         model.load_state_dict(state_dict, strict=True)
-        print("Model weights loaded SUCCESSFULLY and STRICTLY.")
     except Exception as e:
         print(f"Error loading weights: {e}")
         # Fallback senza strict nel caso ci siano chiavi extra non importanti, ma avvisiamo l'utente
@@ -155,6 +149,7 @@ def main():
     parser.add_argument('--save_logits', action='store_true', help='Save dense reconstructed logits to disk')
     parser.add_argument('--dataset_name', default='default_dataset', help='Name of the dataset for organizing saved logits folder')
     parser.add_argument('--device', default='cpu', help='Device to use for computation (e.g., "cpu", "cuda:0")')
+    parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     args = parser.parse_args()
 
     # Dictionary to store anomaly scores for each method
@@ -171,8 +166,12 @@ def main():
     model = model.to(device)
     model.eval()
     
-    for path in glob.glob(os.path.expanduser(str(args.input[0]))):
-        print(f"Processing: {path}")
+    input_paths = glob.glob(os.path.expanduser(str(args.input[0])))
+    if not input_paths:
+        print(f"No images found for pattern: {args.input[0]}")
+        return
+
+    for path in tqdm(input_paths, desc="Evaluating EoMT", disable=args.quiet):
         img_np = np.array(Image.open(path).convert('RGB'))
         # LightningModule's forward pass expects un-normalized pixel values in [0, 255] shaped [B, C, H, W]
         # (See eomt LightningModule forward: x = imgs / 255.0) Let's just pass the B C H W tensor directly 
@@ -249,7 +248,11 @@ def main():
     ood_mask = (ood_gts == 1)
     ind_mask = (ood_gts == 0)
 
-    print(f'Dataset: {args.dataset_name}')
+    if not args.quiet:
+        print("\n=======================================")
+        print(f"Model:   EoMT")
+        print(f"Dataset: {args.dataset_name}")
+        print("---------------------------------------")
     
     # Evaluate for each method
     for method in ['msp', 'maxlogit', 'maxentropy', 'rba']:
@@ -269,9 +272,20 @@ def main():
         prc_auc = average_precision_score(val_label, val_out)
         fpr = fpr_at_95_tpr(val_out, val_label)
 
-        print(f'  Method: {method.upper()} -> AUPRC score: {prc_auc*100.0:.2f}, FPR@TPR95: {fpr*100.0:.2f}')
+        method_label = method.upper() if method != 'maxentropy' else 'MAX ENTROPY'
+        
+        if args.quiet:
+            print(f"[Metrics] Model: EoMT, Dataset: {args.dataset_name}, Method: {method_label}, AuPRC: {prc_auc*100.0:.2f}, FPR95: {fpr*100.0:.2f}")
+        else:
+            print(f"Method:  {method_label}")
+            print(f"AuPRC:   {prc_auc*100.0:.2f}")
+            print(f"FPR95:   {fpr*100.0:.2f}")
+            print("---------------------------------------")
+            
         file.write((f'Dataset: {args.dataset_name}    Method: {method.upper()}    AUPRC score: {prc_auc*100.0:.2f}   FPR@TPR95: {fpr*100.0:.2f}\n'))
         
+    if not args.quiet:
+        print("=======================================\n")
     file.close()
 
 if __name__ == '__main__':

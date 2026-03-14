@@ -74,7 +74,7 @@ def main(args):
 
     iouEvalVal = iouEval(NUM_CLASSES, ignoreIndex=IGNORE_INDEX)
 
-    for img_path in tqdm(image_paths, desc="Evaluating ERFNet"):
+    for img_path in tqdm(image_paths, desc="Evaluating ERFNet", disable=args.quiet):
         gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
                           .replace('leftImg8bit', 'gtFine') \
                           .replace('.png', '_labelIds.png')
@@ -110,8 +110,17 @@ def main(args):
 
     iouVal, iou_classes = iouEvalVal.getIoU()
 
-    print("=======================================")
-    print(f"ERFNet_mIoU_FINAL: {iouVal.item() * 100:.2f}%")
+    miou_val = iouVal.item() * 100
+    if args.quiet:
+        print(f"[Metrics] Model: ERFNet, Dataset: Cityscapes, Method: mIoU, mIoU: {miou_val:.2f}%")
+    else:
+        print("\n=======================================")
+        print(f"Model:   ERFNet")
+        print(f"Dataset: Cityscapes")
+        print(f"Method:  N/A (mIoU)")
+        print("---------------------------------------")
+        print(f"mIoU:    {miou_val:.2f}%")
+        print("=======================================\n")
 
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -131,5 +140,6 @@ if __name__ == '__main__':
     parser.add_argument('--loadModel', default="erfnet.py")
     parser.add_argument('--datadir', default="../Datasets/Cityscapes")
     parser.add_argument('--cpu', action='store_true')
+    parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
 
     main(parser.parse_args())

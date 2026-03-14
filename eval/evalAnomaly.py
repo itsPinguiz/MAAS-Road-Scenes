@@ -13,6 +13,7 @@ from ood_metrics import fpr_at_95_tpr, calc_metrics, plot_roc, plot_pr,plot_barc
 from sklearn.metrics import roc_auc_score, roc_curve, auc, precision_recall_curve, average_precision_score
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 import torch.nn.functional as F
+from tqdm import tqdm
 
 def compute_msp_anomaly_score(logits):
     probs = F.softmax(logits, dim=1)
@@ -74,6 +75,7 @@ def main():
     parser.add_argument('--batch-size', type=int, default=1)
     parser.add_argument('--cpu', action='store_true')
     parser.add_argument('--method', default='msp', choices=['msp', 'maxlogit', 'maxentropy'], help='Anomaly scoring method to use')
+    parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     args = parser.parse_args()
     anomaly_score_list = []
     ood_gts_list = []
@@ -104,11 +106,15 @@ def main():
         return model
 
     model = load_my_state_dict(model, torch.load(weightspath, map_location=lambda storage, loc: storage))
-    print ("Model and weights LOADED successfully")
     model.eval()
     
-    for path in glob.glob(os.path.expanduser(str(args.input[0]))):
-        print(path)
+    # Pre-get list of paths to know total for tqdm
+    input_paths = glob.glob(os.path.expanduser(str(args.input[0])))
+    if not input_paths:
+        print(f"\n[!] ERROR: No images found matching the path: {args.input[0]}")
+        return
+
+    for path in tqdm(input_paths, desc=f"Evaluating {args.method.upper()}", disable=args.quiet):
         images = input_transform((Image.open(path).convert('RGB'))).unsqueeze(0).float().cuda()
         with torch.no_grad():
             result = model(images)
@@ -172,9 +178,19 @@ def main():
     prc_auc = average_precision_score(val_label, val_out)
     fpr = fpr_at_95_tpr(val_out, val_label)
 
-    print(f'Method: {args.method.upper()}')
-    print(f'AUPRC score: {prc_auc*100.0:.2f}')
-    print(f'FPR@TPR95: {fpr*100.0:.2f}')
+    dataset_name = args.input[0].split('/')[-3] if '/' in args.input[0] else 'Unknown'
+    
+    if args.quiet:
+        print(f"[Metrics] Model: ERFNet, Dataset: {dataset_name}, Method: {args.method.upper()}, AuPRC: {prc_auc*100.0:.2f}, FPR95: {fpr*100.0:.2f}")
+    else:
+        print("\n=======================================")
+        print(f"Model:   ERFNet")
+        print(f"Dataset: {dataset_name}")
+        print(f"Method:  {args.method.upper()}")
+        print("---------------------------------------")
+        print(f"AuPRC:   {prc_auc*100.0:.2f}")
+        print(f"FPR95:   {fpr*100.0:.2f}")
+        print("=======================================\n")
 
     file.write((f'    Method: {args.method.upper()}    AUPRC score: {prc_auc*100.0:.2f}   FPR@TPR95: {fpr*100.0:.2f}'))
     file.close()

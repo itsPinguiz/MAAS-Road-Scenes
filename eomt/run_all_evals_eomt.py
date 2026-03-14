@@ -34,11 +34,11 @@ for dataset_name, dataset_path in pbar:
     pbar.set_description(f"Eval: {dataset_name}")
     
     cmd = [
-        sys.executable, "evalAnomaly_eomt.py",
+        "python", "evalAnomaly_eomt.py",
         "--input", dataset_path,
-        "--save_logits",
-        "--dataset_name", dataset_name.replace(" ", "_"),
-        "--device", "cuda:0"
+        "--dataset_name", dataset_name,
+        "--device", "cuda:0",
+        "--quiet"
     ]
     
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -52,14 +52,25 @@ for dataset_name, dataset_path in pbar:
     fpr_dict = {m: "N/A" for m in methods}
     
     # Parse output for metrics
-    # Expected format: "Method: MSP -> AUPRC score: 85.00, FPR@TPR95: 12.00"
+    current_method = None
     for line in result.stdout.split('\n'):
-        match = re.search(r"Method:\s*([A-Za-z]+)\s*->\s*AUPRC score:\s*([0-9.]+),\s*FPR@TPR95:\s*([0-9.]+)", line)
-        if match:
-            method_parsed = match.group(1).lower()
-            if method_parsed in methods:
-                auprc_dict[method_parsed] = match.group(2)
-                fpr_dict[method_parsed] = match.group(3)
+        # Match "Method:  [NAME]" or "Method: [NAME]"
+        method_match = re.search(r"Method:\s*([A-Za-z\s]+)", line)
+        if method_match:
+            current_method = method_match.group(1).strip().lower().replace(" ", "")
+            # No need for explicit remapping if current_method is already in `methods`
+            continue
+            
+        if current_method in methods:
+            # Match "AuPRC:   [VALUE]"
+            auprc_match = re.search(r"AuPRC:\s+([0-9.]+)", line)
+            if auprc_match:
+                auprc_dict[current_method] = auprc_match.group(1)
+                
+            # Match "FPR95:   [VALUE]"
+            fpr_match = re.search(r"FPR95:\s+([0-9.]+)", line)
+            if fpr_match:
+                fpr_dict[current_method] = fpr_match.group(1)
 
     # After parsing the output for this dataset, iterate through methods to update the table
     for method in methods:
@@ -72,14 +83,13 @@ for dataset_name, dataset_path in pbar:
             'FPR95': fpr_dict[method]
         })
         
-        # Update TABLE.md directly if parsing succeeded
+        table_method = method.upper() if method != 'maxentropy' else 'MAX ENTROPY'
+        
+        # Update the right side of the progress bar with the latest metrics
+        pbar.set_postfix({'DS': dataset_name, 'Method': table_method, 'AUPRC': auprc_dict[method]})
+        
+        # Update the main TABLE.md directly
         if auprc_dict[method] != "N/A" and fpr_dict[method] != "N/A":
-            table_method = 'Max Entropy' if method == 'maxentropy' else method.upper()
-            table_method = 'RbA' if method == 'rba' else table_method
-            
-            update_table_entry(model=model, method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
-            
-            # Print cleanly above the progress bar
-            tqdm.write(f"-> {dataset_name} | {table_method}: AUPRC={auprc_dict[method]}, FPR95={fpr_dict[method]}")
+            update_table_entry(model="EoMT", method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
 
 print("\nUpdated TABLE.md with the results for EoMT.")
