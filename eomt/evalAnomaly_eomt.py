@@ -151,7 +151,7 @@ def main():
     parser.add_argument('--ckpt_path', default="../trained_models/epoch_106-step_19902_eomt.ckpt")
     parser.add_argument('--save_logits', action='store_true', help='Save dense reconstructed logits to disk')
     parser.add_argument('--dataset_name', default='default_dataset', help='Name of the dataset for organizing saved logits folder')
-    parser.add_argument('--device', default='cpu', help='Device to use for computation (e.g., "cpu", "cuda:0")')
+    parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use for computation (e.g., "cpu", "cuda:0")')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     args = parser.parse_args()
 

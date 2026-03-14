@@ -14,17 +14,21 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from update_table_t import update_table_t_entry
 from ood_metrics import fpr_at_95_tpr
 
-def get_msp_score(logits, T):
+def get_msp_score(logits, T, device):
     scaled_logits = logits / T
     probs = F.softmax(scaled_logits, dim=1)
     msp, _ = torch.max(probs, dim=1)
-    return (1.0 - msp).squeeze().numpy()
+    return (1.0 - msp).squeeze().data.cpu().numpy()
 
 def main():
     parser = ArgumentParser()
     parser.add_argument('--model', required=True, choices=['ERFNET', 'EOMT'])
     parser.add_argument('--logits_dir', required=True)
+    parser.add_argument('--cpu', action='store_true', help='Use CPU instead of GPU')
     args = parser.parse_args()
+
+    device = torch.device("cpu" if args.cpu or not torch.cuda.is_available() else "cuda")
+    print(f"Using device: {device}")
 
     TEMPS = [0.5, 0.75, 1.1]
     DATASETS = {
@@ -50,8 +54,8 @@ def main():
             all_scores, all_gts = [], []
             
             for l_path in tqdm(logit_files, desc=f"{ds_name} (T={T})"):
-                logits = torch.load(l_path, map_location='cpu')
-                score = get_msp_score(logits, T)
+                logits = torch.load(l_path, map_location=device).to(device)
+                score = get_msp_score(logits, T, device)
                 
                 # Mapping preciso della GT
                 base_name = os.path.basename(l_path).replace(".pt", "")
