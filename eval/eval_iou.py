@@ -5,6 +5,7 @@ from PIL import Image
 from argparse import ArgumentParser
 from torchvision.transforms import Compose, Resize, ToTensor
 from tqdm import tqdm
+import numpy as np
 
 from erfnet import ERFNet
 from transform import Relabel, ToLabel
@@ -66,19 +67,34 @@ def main(args):
         return
 
     iouEvalVal = iouEval(NUM_CLASSES, ignoreIndex=IGNORE_INDEX)
+    
+    # 1. Definiamo la mappatura da labelIds (0-33) a trainIds (0-18)
+    mapping_256 = np.ones(256, dtype=np.uint8) * 255
+    cityscapes_mapping = {
+        7: 0, 8: 1, 11: 2, 12: 3, 13: 4, 17: 5,
+        19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11,
+        25: 12, 26: 13, 27: 14, 28: 15, 31: 16, 32: 17, 33: 18
+    }
+    for k, v in cityscapes_mapping.items():
+        mapping_256[k] = v
+
+    iouEvalVal = iouEval(NUM_CLASSES, ignoreIndex=IGNORE_INDEX)
 
     for img_path in tqdm(image_paths, desc="Evaluating ERFNet"):
-        # Ricostruzione sicura del path della ground truth
         gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
                           .replace('leftImg8bit', 'gtFine') \
                           .replace('.png', '_labelIds.png')
         
         if not os.path.exists(gt_path):
-            print(f"ATTENZIONE: Manca la label per {img_path}")
             continue
 
+        # 2. Carichiamo le immagini
         img = Image.open(img_path).convert('RGB')
-        gt = Image.open(gt_path)
+        
+        # 3. Carichiamo la maschera RAW e applichiamo la mappatura prima di trasformarla
+        label_raw_np = np.array(Image.open(gt_path))
+        label_mapped_np = mapping_256[label_raw_np]
+        gt = Image.fromarray(label_mapped_np) # Riconvertiamo in PIL Image per i transform
 
         if not args.cpu:
             img_t = input_transform_cityscapes(img).unsqueeze(0).cuda()
@@ -90,15 +106,12 @@ def main(args):
         with torch.no_grad():
             outputs = model(img_t)
             
-        # 1. Estraiamo la predizione (indice della classe con probabilità più alta)
         pred = outputs.max(1)[1].unsqueeze(1).data
         
-        # 2. FIX CUDA: Assicuriamoci che nessun valore superi NUM_CLASSES - 1 (19)
-        # Sostituiamo eventuali valori strani (come 255) con l'indice di ignoranza (IGNORE_INDEX)
+        # Ora i dati sono corretti alla radice, ma manteniamo la sicurezza
         gt_t[gt_t >= NUM_CLASSES] = IGNORE_INDEX
         pred[pred >= NUM_CLASSES] = IGNORE_INDEX
         
-        # 3. Ora possiamo passare i tensori sicuri alla funzione di valutazione
         iouEvalVal.addBatch(pred, gt_t)
 
     iouVal, iou_classes = iouEvalVal.getIoU()
