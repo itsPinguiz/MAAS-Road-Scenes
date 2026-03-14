@@ -99,7 +99,8 @@ def main():
                 if name.startswith("module."):
                     own_state[name.split("module.")[-1]].copy_(param)
                 else:
-                    print(name, " not loaded")
+                    if not args.quiet:
+                        print(name, " not loaded")
                     continue
             else:
                 own_state[name].copy_(param)
@@ -177,20 +178,10 @@ def main():
 
     prc_auc = average_precision_score(val_label, val_out)
     fpr = fpr_at_95_tpr(val_out, val_label)
-
-    dataset_name = args.input[0].split('/')[-3] if '/' in args.input[0] else 'Unknown'
     
-    if args.quiet:
-        print(f"[Metrics] Model: ERFNet, Dataset: {dataset_name}, Method: {args.method.upper()}, AuPRC: {prc_auc*100.0:.2f}, FPR95: {fpr*100.0:.2f}")
-    else:
-        print("\n=======================================")
-        print(f"Model:   ERFNet")
-        print(f"Dataset: {dataset_name}")
-        print(f"Method:  {args.method.upper()}")
-        print("---------------------------------------")
-        print(f"AuPRC:   {prc_auc*100.0:.2f}")
-        print(f"FPR95:   {fpr*100.0:.2f}")
-        print("=======================================\n")
+    # OUTPUT FORMATTATO PER IL PARSING
+    print(f"AuPRC: {prc_auc*100.0:.2f}")
+    print(f"FPR95: {fpr*100.0:.2f}")
 
     file.write((f'    Method: {args.method.upper()}    AUPRC score: {prc_auc*100.0:.2f}   FPR@TPR95: {fpr*100.0:.2f}'))
     file.close()

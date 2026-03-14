@@ -5,11 +5,9 @@ import sys
 import argparse
 from tqdm import tqdm
 
-# Add parent directory to path to import the update table utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from update_table import update_table_entry
 
-# Define datasets and their corresponding image paths
 datasets = {
     'Fishyscapes Static': '../Datasets/Fishyscapes/fs_static/images/*.jpg',
     'Fishyscapes Lost & Found': '../Datasets/Fishyscapes/FS_LostFound_full/images/*.png',
@@ -21,63 +19,42 @@ datasets = {
 methods = ['msp', 'maxlogit', 'maxentropy']
 model = 'ERFNet'
 
-results = []
-
-# Pre-calculate all combinations to feed into tqdm
-combinations = [(d_name, d_path, m) for d_name, d_path in datasets.items() for m in methods]
-
 print(f"Starting bulk evaluation for {model}...")
+print(f"Total datasets to test: {len(datasets)} (computing all {len(methods)} methods simultaneously)\n")
 
-# Initialize tqdm progress bar
-pbar = tqdm(combinations, desc="Evaluating", unit="eval")
+pbar = tqdm(datasets.items(), desc="Evaluating ERFNet", unit="dataset")
 
-for dataset_name, dataset_path, method in pbar:
-    # Update progress bar description to show current dataset and method
-    pbar.set_description(f"Eval: {dataset_name} [{method.upper()}]")
+for dataset_name, dataset_path in pbar:
+    pbar.set_description(f"Eval: {dataset_name}")
     
     cmd = [
-        "python", "evalAnomaly.py",
-        "--input", f"Datasets/{dataset_path}",
-        "--method", method,
+        sys.executable, "evalAnomaly.py",
+        "--input", dataset_path,
         "--quiet"
     ]
     
     result = subprocess.run(cmd, capture_output=True, text=True)
     
     if result.returncode != 0:
-        # Use tqdm.write instead of print to avoid breaking the progress bar visual
-        tqdm.write(f"\nError running eval on {dataset_name} with {method.upper()}:", file=sys.stderr)
+        tqdm.write(f"\nError running eval on {dataset_name}:", file=sys.stderr)
         tqdm.write(result.stderr, file=sys.stderr)
         continue
         
-    auprc = "N/A"
-    fpr = "N/A"
+    auprc_dict = {m: "N/A" for m in methods}
+    fpr_dict = {m: "N/A" for m in methods}
     
-    # Parse output for metrics
     for line in result.stdout.split('\n'):
-        if "AuPRC:" in line:
-            match = re.search(r"AuPRC:\s*([0-9.]+)", line)
-            if match:
-                auprc = match.group(1)
-        if "FPR95:" in line:
-            match = re.search(r"FPR95:\s*([0-9.]+)", line)
-            if match:
-                fpr = match.group(1)
-                
-    results.append({
-        'Model': model,
-        'Method': method.upper(),
-        'Dataset': dataset_name,
-        'mIoU': '-',
-        'AuPRC': auprc,
-        'FPR95': fpr
-    })
-    
-    # Update the right side of the progress bar with the latest metrics
-    pbar.set_postfix({'AUPRC': auprc, 'FPR95': fpr})
-    
-    # Update the main TABLE.md directly
-    if auprc != "N/A" and fpr != "N/A":
-        update_table_entry(model=model, method=method, dataset=dataset_name, miou='-', auprc=auprc, fpr95=fpr)
+        match = re.search(r"Method:\s*([A-Za-z]+)\s*->\s*AUPRC score:\s*([0-9.]+),\s*FPR@TPR95:\s*([0-9.]+)", line)
+        if match:
+            method_parsed = match.group(1).lower()
+            if method_parsed in methods:
+                auprc_dict[method_parsed] = match.group(2)
+                fpr_dict[method_parsed] = match.group(3)
 
-print(f"\nUpdated TABLE.md with the results for {model}.")
+    for method in methods:
+        if auprc_dict[method] != "N/A" and fpr_dict[method] != "N/A":
+            table_method = 'Max Entropy' if method == 'maxentropy' else method.upper()
+            update_table_entry(model="ERFNET", method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
+            tqdm.write(f"-> {dataset_name} | {table_method}: AUPRC={auprc_dict[method]}, FPR95={fpr_dict[method]}")
+
+print("\nUpdated TABLE.md with the results for ERFNET.")
