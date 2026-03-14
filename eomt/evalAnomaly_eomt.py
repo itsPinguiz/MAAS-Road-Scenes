@@ -175,48 +175,55 @@ def main():
         return
 
     for path in tqdm(input_paths, desc="Evaluating EoMT", disable=args.quiet):
-        img_np = np.array(Image.open(path).convert('RGB'))
-        # LightningModule's forward pass expects un-normalized pixel values in [0, 255] shaped [B, C, H, W]
-        # (See eomt LightningModule forward: x = imgs / 255.0) Let's just pass the B C H W tensor directly 
-        # But looking at window_imgs_semantic, it takes a list of tensors or a batch tensor. 
-        img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().to(device) / 255.0
-        
-        with torch.no_grad():
-            dense_logits, _, _ = get_dense_logits(model, img_tensor)
-            
-            if args.save_logits:
-                save_dir = osp.join("saved_logits", "eomt", args.dataset_name)
-                os.makedirs(save_dir, exist_ok=True)
-                base_name = osp.splitext(osp.basename(path))[0]
-                save_path = osp.join(save_dir, f"{base_name}.pt")
-                torch.save(dense_logits.cpu(), save_path)
-                
-            # Compute all 4 anomaly scores simultaneously
-            anomaly_result_msp = compute_msp_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_maxlogit = compute_maxlogit_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_maxentropy = compute_maxentropy_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_rba = compute_rba_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+        base_name = osp.splitext(osp.basename(path))[0]
+        save_dir = osp.join("saved_logits", "eomt", args.dataset_name.replace(" ", "_"))
+        save_path = osp.join(save_dir, f"{base_name}.pt")
 
-        # Handle ground truth path
+        # Inizializziamo le variabili per evitare errori nel 'del' finale
+        img_tensor = None 
+
+        # --- LOGICA IBRIDA: CARICAMENTO O INFERENZA ---
+        if osp.exists(save_path):
+            # Caricamento istantaneo (funziona su CPU/GPU)
+            dense_logits = torch.load(save_path, map_location=device)
+        else:
+            # Esecuzione inferenza (Richiede GPU)
+            img_np_temp = np.array(Image.open(path).convert('RGB'))
+            img_tensor = torch.from_numpy(img_np_temp).permute(2, 0, 1).unsqueeze(0).float().to(device) / 255.0
+            
+            with torch.no_grad():
+                dense_logits, _, _ = get_dense_logits(model, img_tensor)
+                
+                if args.save_logits:
+                    os.makedirs(save_dir, exist_ok=True)
+                    torch.save(dense_logits.cpu(), save_path)
+        
+        # Recuperiamo le dimensioni originali per il resize della maschera GT
+        # Se non abbiamo fatto l'inferenza, dobbiamo comunque leggere l'immagine per le dimensioni
+        w, h = Image.open(path).size
+
+        # Calcolo simultaneo dei 4 punteggi
+        anomaly_result_msp = compute_msp_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+        anomaly_result_maxlogit = compute_maxlogit_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+        anomaly_result_maxentropy = compute_maxentropy_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+        anomaly_result_rba = compute_rba_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+
+        # --- GESTIONE GROUND TRUTH ---
         pathGT = path.replace("images", "labels_masks")                
-        if "RoadObsticle21" in pathGT:
-           pathGT = pathGT.replace("webp", "png")
-        if "fs_static" in pathGT:
-           pathGT = pathGT.replace("jpg", "png")                
-        if "RoadAnomaly" in pathGT:
-           pathGT = pathGT.replace("jpg", "png")  
+        if "RoadObsticle21" in pathGT: pathGT = pathGT.replace("webp", "png")
+        if "fs_static" in pathGT: pathGT = pathGT.replace("jpg", "png")                
+        if "RoadAnomaly" in pathGT: pathGT = pathGT.replace("jpg", "png")  
 
         try:
             mask_img = Image.open(pathGT)
-            # Resize target to match half resolution (as the model operates internally usually scale = downsample)
-            # Actually for ERFNet we did nearest downsample to 512, 1024. For EoMT we should use the same shape as anomaly_result.
-            # Anomaly result spatial shape matches the reverted dense logits which matches the input image.
-            mask_img = mask_img.resize((img_np.shape[1], img_np.shape[0]), Image.NEAREST)
+            # Usiamo le dimensioni w, h ottenute sopra
+            mask_img = mask_img.resize((w, h), Image.NEAREST)
             ood_gts = np.array(mask_img)
         except Exception as e:
             print(f"Could not load mask for {pathGT}: {e}")
             continue
 
+        # Mappature classi (RoadAnomaly, LostAndFound, etc.)
         if "RoadAnomaly" in pathGT:
             ood_gts = np.where((ood_gts==2), 1, ood_gts)
         if "LostAndFound" in pathGT:
@@ -228,18 +235,18 @@ def main():
             ood_gts = np.where((ood_gts<20), 0, ood_gts)
             ood_gts = np.where((ood_gts==255), 1, ood_gts)
 
-        if 1 not in np.unique(ood_gts):
-            continue              
-        else:
+        if 1 in np.unique(ood_gts):
             ood_gts_list.append(ood_gts)
             anomaly_scores_all['msp'].append(anomaly_result_msp)
             anomaly_scores_all['maxlogit'].append(anomaly_result_maxlogit)
             anomaly_scores_all['maxentropy'].append(anomaly_result_maxentropy)
             anomaly_scores_all['rba'].append(anomaly_result_rba)
             
-        del dense_logits, anomaly_result_msp, anomaly_result_maxlogit, anomaly_result_maxentropy, anomaly_result_rba, ood_gts, mask_img, img_tensor
+        # Pulizia memoria
+        del dense_logits, anomaly_result_msp, anomaly_result_maxlogit, anomaly_result_maxentropy, anomaly_result_rba, ood_gts, mask_img
+        if img_tensor is not None: del img_tensor
         torch.cuda.empty_cache()
-
+        
     if len(ood_gts_list) == 0:
         print("No valid evaluations found.")
         return
