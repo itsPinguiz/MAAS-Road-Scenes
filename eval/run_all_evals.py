@@ -29,7 +29,7 @@ for dataset_name, dataset_path in datasets.items():
     for method in methods:
         print(f"Running evaluation for Dataset: {dataset_name}, Method: {method.upper()}...")
         cmd = [
-            ".venv_eval/bin/python", "evalAnomaly.py",
+            sys.executable, "evalAnomaly.py",
             "--input", dataset_path,
             "--method", method
         ]

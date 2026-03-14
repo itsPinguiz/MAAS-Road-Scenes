@@ -29,7 +29,7 @@ for dataset_name, dataset_path in datasets.items():
     print(f"Running evaluation for Dataset: {dataset_name}...")
     
     cmd = [
-        ".venv_eomt/bin/python", "evalAnomaly_eomt.py",
+        sys.executable, "evalAnomaly_eomt.py",
         "--input", dataset_path,
         "--save_logits",
         "--dataset_name", dataset_name.replace(" ", "_"),
