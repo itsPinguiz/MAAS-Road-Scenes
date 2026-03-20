@@ -1,9 +1,8 @@
 import os
 from bs4 import BeautifulSoup
 
-TABLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TABLE.md")
+TABLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TABLE_T.md")
 
-# Datasets in the order they appear in the HTML table
 DATASET_TO_COL_INDEX = {
     'RoadAnomaly21': 0,
     'RoadObsticle21': 1,
@@ -12,11 +11,9 @@ DATASET_TO_COL_INDEX = {
     'RoadAnomaly': 4
 }
 
-def update_table_entry(model: str, method: str, dataset: str = None, miou: str = None, auprc: str = None, fpr95: str = None):
+def update_table_t_entry(model: str, method: str, dataset: str, auprc: str, fpr95: str):
     """
-    Updates the TABLE.md file with the given metrics using BeautifulSoup.
-    If only miou is provided, updates the mIoU column for the model/method.
-    If dataset, auprc, and fpr95 are provided, updates the respective AuPRC and FPR95 columns.
+    Updates the TABLE_T.md file with the given metrics using BeautifulSoup.
     """
     if not os.path.exists(TABLE_PATH):
         print(f"Error: {TABLE_PATH} not found.")
@@ -28,7 +25,7 @@ def update_table_entry(model: str, method: str, dataset: str = None, miou: str =
     soup = BeautifulSoup(html, 'html.parser')
     tbody = soup.find('tbody')
     if not tbody:
-        print("Error: <tbody> not found in TABLE.md.")
+        print("Error: <tbody> not found in TABLE_T.md.")
         return
 
     current_model = None
@@ -39,7 +36,6 @@ def update_table_entry(model: str, method: str, dataset: str = None, miou: str =
         if not tds:
             continue
 
-        # Check if this row starts a new model block (first td has rowspan)
         first_td = tds[0]
         has_rowspan = first_td.has_attr('rowspan')
         
@@ -53,15 +49,9 @@ def update_table_entry(model: str, method: str, dataset: str = None, miou: str =
             if base_idx < len(tds):
                 row_method = tds[base_idx].get_text(strip=True).lower()
                 
-                # Loose matching for "Max Entropy" -> "maxentropy"
                 is_match = (row_method == target_method) or (target_method == 'maxentropy' and row_method == 'max entropy')
                 
                 if is_match:
-                    if miou is not None and miou != '-':
-                        miou_idx = base_idx + 1
-                        if miou_idx < len(tds):
-                            tds[miou_idx].string = str(miou)
-                    
                     if dataset and auprc and fpr95 and dataset in DATASET_TO_COL_INDEX:
                         ds_col = DATASET_TO_COL_INDEX[dataset]
                         metrics_start_idx = base_idx + 2

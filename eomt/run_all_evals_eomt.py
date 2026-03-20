@@ -1,21 +1,85 @@
+# --- ENVIRONMENT SETUP BLOCK ---
+import os
+import sys
+
+# 1. Conditional Environment Detection
+IS_COLAB = 'google.colab' in sys.modules
+
+# 2. Hybrid Pathing
+if IS_COLAB:
+    BASE_PATH = '/content/drive/MyDrive/Project'
+    # Optional: Automatically install dependencies if on Colab
+    import subprocess
+    print("Checking requirements...")
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', '-r', os.path.join(BASE_PATH, 'requirements.txt')])
+    except Exception as e:
+        print(f"Warning: Could not install requirements: {e}")
+else:
+    BASE_PATH = '.'
+
+def resolve_path(relative_path):
+    """ Helper to resolve paths consistently between environments. """
+    if IS_COLAB and relative_path.startswith('../'):
+        relative_path = relative_path.lstrip('../')
+    return os.path.join(BASE_PATH, relative_path)
+
+# 3. Unified Device Logic
+import torch
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device('mps')
+    else:
+        return torch.device('cpu')
+
+DEVICE = get_device()
+
+# 4. GPU Health Check
+def print_gpu_health(device):
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        details = f"[bold]Hardware environment:[/bold] {device.type.upper()}\n"
+        if device.type == 'cuda':
+            details += f"CUDA Device: {torch.cuda.get_device_name(device)}\n"
+            vram = torch.cuda.get_device_properties(device).total_memory / (1024**3)
+            details += f"Available VRAM: {vram:.2f} GB"
+        elif device.type == 'mps':
+            details += "Apple Silicon (MPS) detected."
+        else:
+            details += "[yellow]Running on CPU. Performance will be limited.[/yellow]"
+        console.print(Panel(details, title="[bold blue]GPU Health Check[/bold blue]", border_style="blue", expand=False))
+    except ImportError:
+        pass
+
+print_gpu_health(DEVICE)
+# --- END SETUP BLOCK ---
+
 import os
 import subprocess
 import re
 import sys
 import argparse
-from tqdm import tqdm
+import warnings
+
+warnings.filterwarnings("ignore", ".*'network' is an instance.*")
 
 # Add parent directory to path to import the update table utility
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from update_table import update_table_entry
+from update_table import update_table_entry  # type: ignore
+from logger import logger, console
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 
 # Define datasets and their corresponding image paths
 datasets = {
-    'Fishyscapes Static': '../Datasets/Fishyscapes/fs_static/images/*.jpg',
-    'Fishyscapes Lost & Found': '../Datasets/Fishyscapes/FS_LostFound_full/images/*.png',
-    'RoadAnomaly': '../Datasets/RoadAnomaly/images/*.jpg',
-    'RoadAnomaly21': '../Datasets/SegmentMeIfYouCan/RoadAnomaly21/images/*.png',
-    'RoadObsticle21': '../Datasets/SegmentMeIfYouCan/RoadObsticle21/images/*.webp'
+    'Fishyscapes Static': resolve_path('../Datasets/Fishyscapes/fs_static/images/*.jpg'),
+    'Fishyscapes Lost & Found': resolve_path('../Datasets/Fishyscapes/FS_LostFound_full/images/*.png'),
+    'RoadAnomaly': resolve_path('../Datasets/RoadAnomaly/images/*.jpg'),
+    'RoadAnomaly21': resolve_path('../Datasets/SegmentMeIfYouCan/RoadAnomaly21/images/*.png'),
+    'RoadObsticle21': resolve_path('../Datasets/SegmentMeIfYouCan/RoadObsticle21/images/*.webp')
 }
 
 methods = ['msp', 'maxlogit', 'maxentropy', 'rba']
@@ -23,73 +87,79 @@ model = 'EoMT'
 
 results = []
 
-print(f"Starting bulk evaluation for {model}...")
-print(f"Total datasets to test: {len(datasets)} (computing all {len(methods)} methods simultaneously)\n")
+logger.info(f"Starting bulk evaluation for {model}...")
+logger.info(f"Total datasets to test: {len(datasets)} (computing all {len(methods)} methods simultaneously)")
 
-# Initialize tqdm progress bar over the datasets
-pbar = tqdm(datasets.items(), desc="Evaluating EoMT", unit="dataset")
-
-for dataset_name, dataset_path in pbar:
-    # Update progress bar description
-    pbar.set_description(f"Eval: {dataset_name}")
+with Progress(
+    TextColumn("[progress.description]{task.description}"),
+    BarColumn(),
+    TaskProgressColumn(),
+    TimeRemainingColumn(),
+    console=console
+) as progress:
+    task_id = progress.add_task("Evaluating EoMT", total=len(datasets))
     
-    cmd = [
-        "python", "evalAnomaly_eomt.py",
-        "--input", dataset_path,
-        "--dataset_name", dataset_name,
-        "--device", "cuda:0",
-        "--quiet"
-    ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        tqdm.write(f"\nError running eval on {dataset_name}:", file=sys.stderr)
-        tqdm.write(result.stderr, file=sys.stderr)
-        continue
+    for dataset_name, dataset_path in datasets.items():
+        progress.update(task_id, description=f"Eval: {dataset_name}")
         
-    auprc_dict = {m: "N/A" for m in methods}
-    fpr_dict = {m: "N/A" for m in methods}
-    
-    # Parse output for metrics
-    current_method = None
-    for line in result.stdout.split('\n'):
-        # Match "Method:  [NAME]" or "Method: [NAME]"
-        method_match = re.search(r"Method:\s*([A-Za-z\s]+)", line)
-        if method_match:
-            current_method = method_match.group(1).strip().lower().replace(" ", "")
-            # No need for explicit remapping if current_method is already in `methods`
+        cmd = [
+            sys.executable, "evalAnomaly_eomt.py",
+            "--input", dataset_path,
+            "--dataset_name", dataset_name,
+            "--device", "cuda:0",
+            "--quiet",
+            "--save_logits"
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"Error running eval on {dataset_name}:\n{result.stderr}")
+            progress.advance(task_id)
             continue
             
-        if current_method in methods:
-            # Match "AuPRC:   [VALUE]"
-            auprc_match = re.search(r"AuPRC:\s+([0-9.]+)", line)
-            if auprc_match:
-                auprc_dict[current_method] = auprc_match.group(1)
-                
-            # Match "FPR95:   [VALUE]"
-            fpr_match = re.search(r"FPR95:\s+([0-9.]+)", line)
-            if fpr_match:
-                fpr_dict[current_method] = fpr_match.group(1)
+        auprc_dict = {m: "N/A" for m in methods}
+        fpr_dict = {m: "N/A" for m in methods}
+        
+        # Parse output for metrics
+        for line in result.stdout.split('\n'):
+            # Match "[Metrics] Model: EoMT, Dataset: [NAME], Method: [NAME], AuPRC: [VALUE], FPR95: [VALUE]"
+            match = re.search(r"Method:\s*([^,]+),\s*AuPRC:\s*([0-9.]+),\s*FPR95:\s*([0-9.]+)", line)
+            if match:
+                method_parsed = match.group(1).strip().lower().replace(" ", "")
+                # Account for "maxentropy" vs "max entropy"
+                if method_parsed == 'maxentropy':
+                    method_parsed = 'maxentropy'
+                    
+                if method_parsed in methods:
+                    auprc_dict[method_parsed] = match.group(2)
+                    fpr_dict[method_parsed] = match.group(3)
 
-    # After parsing the output for this dataset, iterate through methods to update the table
-    for method in methods:
-        results.append({
-            'Model': model,
-            'Method': method.upper(),
-            'Dataset': dataset_name,
-            'mIoU': '-',
-            'AuPRC': auprc_dict[method],
-            'FPR95': fpr_dict[method]
-        })
-        
-        table_method = method.upper() if method != 'maxentropy' else 'MAX ENTROPY'
-        
-        # Update the right side of the progress bar with the latest metrics
-        pbar.set_postfix({'DS': dataset_name, 'Method': table_method, 'AUPRC': auprc_dict[method]})
-        
-        # Update the main TABLE.md directly
-        if auprc_dict[method] != "N/A" and fpr_dict[method] != "N/A":
-            update_table_entry(model="EoMT", method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
+        # After parsing the output for this dataset, iterate through methods to update the table
+        for method in methods:
+            results.append({
+                'Model': model,
+                'Method': method.upper(),
+                'Dataset': dataset_name,
+                'mIoU': '-',
+                'AuPRC': auprc_dict[method],
+                'FPR95': fpr_dict[method]
+            })
+            
+            if method == 'maxentropy':
+                table_method = 'MAX ENTROPY'
+            elif method == 'rba':
+                table_method = 'Rba'
+            else:
+                table_method = method.upper()
+            
+            # Update the right side of the progress bar with the latest metrics inside description
+            progress.update(task_id, description=f"Eval: {dataset_name} | {table_method}: AUPRC={auprc_dict[method]}")
+            
+            # Update the main TABLE.md directly
+            if auprc_dict[method] != "N/A" and fpr_dict[method] != "N/A":
+                update_table_entry(model="EoMT", method=table_method, dataset=dataset_name, miou='-', auprc=auprc_dict[method], fpr95=fpr_dict[method])
 
-print("\nUpdated TABLE.md with the results for EoMT.")
+        progress.advance(task_id)
+
+logger.success("Updated TABLE.md with the results for EoMT.")

@@ -1,7 +1,74 @@
+# --- ENVIRONMENT SETUP BLOCK ---
+import os
+import sys
+
+# 1. Conditional Environment Detection
+IS_COLAB = 'google.colab' in sys.modules
+
+# 2. Hybrid Pathing
+if IS_COLAB:
+    BASE_PATH = '/content/drive/MyDrive/Project'
+    # Optional: Automatically install dependencies if on Colab
+    import subprocess
+    print("Checking requirements...")
+    try:
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', '-r', os.path.join(BASE_PATH, 'requirements.txt')])
+    except Exception as e:
+        print(f"Warning: Could not install requirements: {e}")
+else:
+    BASE_PATH = '.'
+
+def resolve_path(relative_path):
+    """ Helper to resolve paths consistently between environments. """
+    if IS_COLAB and relative_path.startswith('../'):
+        relative_path = relative_path.lstrip('../')
+    return os.path.join(BASE_PATH, relative_path)
+
+# 3. Unified Device Logic
+import torch
+def get_device():
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return torch.device('mps')
+    else:
+        return torch.device('cpu')
+
+DEVICE = get_device()
+
+# 4. GPU Health Check
+def print_gpu_health(device):
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        details = f"[bold]Hardware environment:[/bold] {device.type.upper()}\n"
+        if device.type == 'cuda':
+            details += f"CUDA Device: {torch.cuda.get_device_name(device)}\n"
+            vram = torch.cuda.get_device_properties(device).total_memory / (1024**3)
+            details += f"Available VRAM: {vram:.2f} GB"
+        elif device.type == 'mps':
+            details += "Apple Silicon (MPS) detected."
+        else:
+            details += "[yellow]Running on CPU. Performance will be limited.[/yellow]"
+        console.print(Panel(details, title="[bold blue]GPU Health Check[/bold blue]", border_style="blue", expand=False))
+    except ImportError:
+        pass
+
+print_gpu_health(DEVICE)
+# --- END SETUP BLOCK ---
+
 import sys
 import os
 # Append the eval path to import existing dataloader structures without duplication
 sys.path.append(os.path.abspath('../eval'))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import warnings
+warnings.filterwarnings("ignore", ".*'network' is an instance.*")
+
+from logger import logger, console
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 
 import torch
 import time
@@ -57,9 +124,9 @@ def load_eomt_model(ckpt_path):
         # Mettiamo strict=True. Se fallisce ora, significa che abbiamo ancora un mismatch, ma con questi parametri non dovrebbe!
         model.load_state_dict(state_dict, strict=True)
     except Exception as e:
-        print(f"Error loading weights: {e}")
+        logger.error(f"Error loading weights: {e}")
         # Fallback senza strict nel caso ci siano chiavi extra non importanti, ma avvisiamo l'utente
-        print("Attempting fallback with strict=False...")
+        logger.warning("Attempting fallback with strict=False...")
         model.load_state_dict(state_dict, strict=False)
 
     return model
@@ -70,16 +137,16 @@ IGNORE_INDEX = 19
 
 def main():
     parser = ArgumentParser()
-    parser.add_argument('--datadir', default="../")
+    parser.add_argument('--datadir', default=resolve_path("../"))
     parser.add_argument('--num-workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=1)
-    parser.add_argument('--ckpt_path', default="../trained_models/epoch_106-step_19902_eomt.ckpt")
+    parser.add_argument('--ckpt_path', default=resolve_path("../trained_models/epoch_106-step_19902_eomt.ckpt"))
     parser.add_argument('--device', default='cuda:0', help='Device to use for computation')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     args = parser.parse_args()
 
     model = load_eomt_model(args.ckpt_path)
-    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    device = DEVICE
     model = model.to(device)
     model.eval()
 
@@ -99,7 +166,7 @@ def main():
                     image_paths.append(os.path.join(root, file))
 
     if len(image_paths) == 0:
-        print(f"ERRORE CRITICO: Nessuna immagine trovata in {args.datadir}")
+        logger.error(f"ERRORE CRITICO: Nessuna immagine trovata in {args.datadir}")
         return
 
     # Metrica: 19 classi (ignorando l'indice 255)
@@ -118,50 +185,61 @@ def main():
     for k, v in cityscapes_mapping.items():
         mapping_256[k] = v
 
-    for img_path in tqdm(image_paths, desc="Evaluating images", disable=args.quiet):
-        # Ora cerchiamo il suffisso corretto che hai mostrato nel terminale: '_labelIds.png'
-        gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
-                          .replace('leftImg8bit', 'gtFine') \
-                          .replace('.png', '_labelIds.png')
-        
-        if not os.path.exists(gt_path):
-            print(f"ATTENZIONE: Manca la label per {img_path}\\nCercata in: {gt_path}")
-            continue
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        disable=args.quiet
+    ) as progress:
+        task_id = progress.add_task("Evaluating images", total=len(image_paths))
 
-        valid_images_count += 1
-
-        # Carica Immagine e Label Raw
-        img_np = np.array(Image.open(img_path).convert('RGB'))
-        label_raw_np = np.array(Image.open(gt_path))
-        
-        # Mappa i 34 ID raw ai 19 Train ID in modo istantaneo
-        label_mapped_np = mapping_256[label_raw_np]
-        
-        img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().to(device)
-        label_tensor = torch.from_numpy(label_mapped_np).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            dense_logits, _, _ = get_dense_logits(model, img_tensor)
-            preds = torch.argmax(dense_logits, dim=1)
-            metric.update(preds, label_tensor)
+        for img_path in image_paths:
+            # Ora cerchiamo il suffisso corretto che hai mostrato nel terminale: '_labelIds.png'
+            gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
+                              .replace('leftImg8bit', 'gtFine') \
+                              .replace('.png', '_labelIds.png')
             
-        # Alla fine del ciclo for, dopo metric.update()
-        del dense_logits, preds, img_tensor, label_tensor
-        torch.cuda.empty_cache()
+            if not os.path.exists(gt_path):
+                logger.warning(f"ATTENZIONE: Manca la label per {img_path}\nCercata in: {gt_path}")
+                progress.advance(task_id)
+                continue
+
+            valid_images_count += 1
+
+            # Carica Immagine e Label Raw
+            img_np = np.array(Image.open(img_path).convert('RGB'))
+            label_raw_np = np.array(Image.open(gt_path))
+            
+            # Mappa i 34 ID raw ai 19 Train ID in modo istantaneo
+            label_mapped_np = mapping_256[label_raw_np]
+            
+            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().to(device)
+            label_tensor = torch.from_numpy(label_mapped_np).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                dense_logits, _, _ = get_dense_logits(model, img_tensor)
+                preds = torch.argmax(dense_logits, dim=1)
+                metric.update(preds, label_tensor)
+                
+            # Alla fine del ciclo for, dopo metric.update()
+            del dense_logits, preds, img_tensor, label_tensor
+            torch.cuda.empty_cache()
+            progress.advance(task_id)
 
     # Calcola il risultato finale
     mIoU = metric.compute().item()
     miou_val = mIoU * 100
     if args.quiet:
-        print(f"[Metrics] Model: EoMT, Dataset: Cityscapes, Method: mIoU, mIoU: {miou_val:.2f}%")
+        logger.info(f"[Metrics] Model: EoMT, Dataset: Cityscapes, Method: mIoU, mIoU: {miou_val:.2f}%")
     else:
-        print("\n=======================================")
-        print(f"Model:   EoMT")
-        print(f"Dataset: Cityscapes")
-        print(f"Method:  N/A (mIoU)")
-        print("---------------------------------------")
-        print(f"mIoU:    {miou_val:.2f}%")
-        print("=======================================\n")
+        logger.info(f"\n[bold]Model:[/bold]   EoMT")
+        logger.info(f"[bold]Dataset:[/bold] Cityscapes")
+        logger.info(f"[bold]Method:[/bold]  N/A (mIoU)")
+        logger.info(f"---------------------------------------")
+        logger.info(f"[bold cyan]mIoU:[/bold cyan]    {miou_val:.2f}%")
+        logger.info(f"=======================================\n")
 
     import sys
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -172,7 +250,7 @@ def main():
     for method in ['MSP', 'MaxLogit', 'Max Entropy', 'RbA']:
         update_table_entry(model="EoMT", method=method, miou=miou_str)
     
-    print("Tabella TABLE.md aggiornata con successo con la mIoU di EoMT!")
+    logger.success("Tabella TABLE.md aggiornata con successo con la mIoU di EoMT!")
 
 if __name__ == '__main__':
     main()
