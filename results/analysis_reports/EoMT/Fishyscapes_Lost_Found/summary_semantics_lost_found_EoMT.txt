@@ -1,0 +1,21 @@
+======================================================================
+  Semantic Analysis Summary  |  Model: EoMT  |  Dataset: lost_found
+======================================================================
+
+  REGION ANALYSIS
+  Method          Region          AuPRC %    FPR95 %
+  --------------------------------------------------
+  MSP             boundary          82.56      57.22
+                  flat              13.82       7.53
+  MAXLOGIT        boundary          82.58      56.95
+                  flat              13.77       7.37
+  MAXENTROPY      boundary          81.82      57.17
+                  flat              16.28       7.42
+
+  DEPTH BAND ANALYSIS (AuPRC %)
+  Method                Far (B0)   Mid-far (B1)   Mid-far (B2)  Mid-near (B3)      Near (B4)
+  ------------------------------------------------------------------------------------------
+  MSP                        nan            nan          20.62          24.95          12.74
+  MAXLOGIT                   nan            nan          20.70          25.04          12.67
+  MAXENTROPY                 nan            nan          21.67          24.63          13.86
+======================================================================

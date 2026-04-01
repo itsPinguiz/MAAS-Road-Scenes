@@ -4,7 +4,6 @@ trained_models/*
 TASKS.md
 checkpoints/*
 config/*
-results/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -52,8 +51,3 @@ env.bak/
 venv.bak/
 venv_eomt/
 venv_eval/
-
-!results/TABLE_T.md
-!results/TABLE.md
-!results/REPORT.md
-!**/ .gitkeep

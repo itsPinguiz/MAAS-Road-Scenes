@@ -1,0 +1,21 @@
+======================================================================
+  Semantic Analysis Summary  |  Model: EoMT  |  Dataset: road_obstacle21
+======================================================================
+
+  REGION ANALYSIS
+  Method          Region          AuPRC %    FPR95 %
+  --------------------------------------------------
+  MSP             boundary          95.33      21.43
+                  flat              96.67       0.18
+  MAXLOGIT        boundary          95.30      21.57
+                  flat              96.70       0.18
+  MAXENTROPY      boundary          95.23      21.57
+                  flat              96.80       0.17
+
+  DEPTH BAND ANALYSIS (AuPRC %)
+  Method                Far (B0)   Mid-far (B1)   Mid-far (B2)  Mid-near (B3)      Near (B4)
+  ------------------------------------------------------------------------------------------
+  MSP                        nan            nan          92.97          97.13          96.15
+  MAXLOGIT                   nan            nan          93.00          97.18          96.16
+  MAXENTROPY                 nan            nan          93.09          97.24          96.18
+======================================================================

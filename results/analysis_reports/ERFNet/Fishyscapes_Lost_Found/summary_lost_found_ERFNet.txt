@@ -1,0 +1,33 @@
+Model: ERFNet | Dataset: lost_found
+------------------------------
+Size: Small
+  msp       : 0.97%
+  maxlogit  : 2.17%
+  maxentropy: 1.62%
+Size: Medium
+  msp       : 0.74%
+  maxlogit  : 1.30%
+  maxentropy: 1.05%
+Size: Large
+  msp       : 0.20%
+  maxlogit  : 0.36%
+  maxentropy: 0.26%
+
+Class Prediction on OOD Pixels:
+  road           : 66.6%
+  sidewalk       : 14.2%
+  building       : 0.1%
+  wall           : 1.0%
+  fence          : 2.7%
+  pole           : 0.7%
+  traffic sign   : 1.5%
+  vegetation     : 0.0%
+  terrain        : 0.5%
+  person         : 6.1%
+  rider          : 0.2%
+  car            : 4.2%
+  truck          : 0.0%
+  bus            : 1.1%
+  train          : 0.0%
+  motorcycle     : 0.6%
+  bicycle        : 0.4%

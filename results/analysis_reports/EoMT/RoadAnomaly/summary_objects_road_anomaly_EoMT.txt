@@ -1,0 +1,33 @@
+Model: EoMT | Dataset: road_anomaly
+------------------------------
+Size: Small
+  msp       : 0.48%
+  maxlogit  : 0.48%
+  maxentropy: 0.56%
+Size: Medium
+  msp       : 3.67%
+  maxlogit  : 3.69%
+  maxentropy: 5.16%
+Size: Large
+  msp       : 71.18%
+  maxlogit  : 70.58%
+  maxentropy: 73.91%
+
+Class Prediction on OOD Pixels:
+  road           : 24.9%
+  sidewalk       : 6.1%
+  building       : 1.7%
+  wall           : 12.3%
+  fence          : 4.3%
+  pole           : 0.1%
+  traffic light  : 0.0%
+  traffic sign   : 0.9%
+  vegetation     : 29.7%
+  terrain        : 5.5%
+  sky            : 0.1%
+  person         : 4.5%
+  rider          : 2.3%
+  car            : 4.6%
+  truck          : 1.9%
+  motorcycle     : 1.0%
+  bicycle        : 0.0%

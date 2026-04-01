@@ -1,0 +1,27 @@
+Model: ERFNet | Dataset: road_obstacle21
+------------------------------
+Size: Small
+  msp       : 1.65%
+  maxlogit  : 1.90%
+  maxentropy: 1.77%
+Size: Medium
+  msp       : 1.21%
+  maxlogit  : 2.13%
+  maxentropy: 1.47%
+Size: Large
+  msp       : 0.39%
+  maxlogit  : 1.08%
+  maxentropy: 0.41%
+
+Class Prediction on OOD Pixels:
+  road           : 10.8%
+  sidewalk       : 0.1%
+  fence          : 0.0%
+  terrain        : 1.0%
+  person         : 40.0%
+  rider          : 0.2%
+  car            : 38.3%
+  bus            : 0.0%
+  train          : 0.1%
+  motorcycle     : 9.4%
+  bicycle        : 0.0%

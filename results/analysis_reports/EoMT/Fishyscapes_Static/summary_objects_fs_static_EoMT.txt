@@ -1,0 +1,30 @@
+Model: EoMT | Dataset: fs_static
+------------------------------
+Size: Small
+  msp       : 0.04%
+  maxlogit  : 0.04%
+  maxentropy: 0.04%
+Size: Medium
+  msp       : 0.72%
+  maxlogit  : 0.71%
+  maxentropy: 0.75%
+Size: Large
+  msp       : 58.81%
+  maxlogit  : 59.01%
+  maxentropy: 57.54%
+
+Class Prediction on OOD Pixels:
+  road           : 49.4%
+  sidewalk       : 0.2%
+  building       : 2.0%
+  wall           : 0.6%
+  fence          : 0.1%
+  pole           : 0.1%
+  traffic sign   : 1.4%
+  vegetation     : 27.3%
+  terrain        : 9.2%
+  person         : 1.1%
+  rider          : 2.7%
+  car            : 5.2%
+  bus            : 0.6%
+  bicycle        : 0.0%
