@@ -53,5 +53,7 @@ venv.bak/
 venv_eomt/
 venv_eval/
 
-
+!results/TABLE_T.md
+!results/TABLE.md
+!results/REPORT.md
 !**/ .gitkeep
