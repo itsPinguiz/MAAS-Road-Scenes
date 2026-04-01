@@ -45,9 +45,20 @@ def _load() -> SimpleNamespace:
         venvs=SimpleNamespace(**{k: abs_path(v) for k, v in p["venvs"].items()}),
     )
 
-    ns_eval = SimpleNamespace(**raw["eval"])
+    def dict_to_ns(d):
+        if not isinstance(d, dict):
+            return d
+        return SimpleNamespace(**{k: dict_to_ns(v) for k, v in d.items()})
 
-    return SimpleNamespace(paths=ns_paths, eval=ns_eval, is_colab=is_colab)
+    ns_eval = dict_to_ns(raw["eval"])
+    ns_analysis = dict_to_ns(raw["analysis"])
+
+    return SimpleNamespace(
+        paths=ns_paths, 
+        eval=ns_eval, 
+        analysis=ns_analysis,
+        is_colab=is_colab
+    )
 
 
 # Single shared instance — import this in every script
