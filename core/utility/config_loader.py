@@ -1,0 +1,54 @@
+"""
+config_loader.py
+----------------
+Loads config.yml from the project root and exposes a fully-resolved `cfg`
+object.  All relative paths are converted to absolute paths at import time,
+so every script gets consistent references regardless of its cwd.
+
+Usage:
+    from config_loader import cfg
+    print(cfg.paths.datasets.cityscapes)
+    print(cfg.eval.temperatures)
+"""
+
+import os
+import sys
+import yaml
+from types import SimpleNamespace
+
+# Always points to the project root (the directory containing 'core', 'config', etc.)
+_UTILITY_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(_UTILITY_DIR))
+_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "config", "config.yml")
+
+
+def _load() -> SimpleNamespace:
+    with open(_CONFIG_PATH, encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    # Colab detection: if running on Colab swap to the Colab drive root
+    is_colab = "google.colab" in sys.modules
+    root = raw["paths"]["colab_root"] if is_colab else _PROJECT_ROOT
+
+    def abs_path(p: str) -> str:
+        """Return an absolute path, resolving relative paths against root."""
+        return p if os.path.isabs(p) else os.path.normpath(os.path.join(root, p))
+
+    p = raw["paths"]
+
+    ns_paths = SimpleNamespace(
+        root=root,
+        datasets=SimpleNamespace(**{k: abs_path(v) for k, v in p["datasets"].items()}),
+        models=SimpleNamespace(**{k: abs_path(v) for k, v in p["models"].items()}),
+        logits=SimpleNamespace(**{k: abs_path(v) for k, v in p["logits"].items()}),
+        tables=SimpleNamespace(**{k: abs_path(v) for k, v in p["tables"].items()}),
+        venvs=SimpleNamespace(**{k: abs_path(v) for k, v in p["venvs"].items()}),
+    )
+
+    ns_eval = SimpleNamespace(**raw["eval"])
+
+    return SimpleNamespace(paths=ns_paths, eval=ns_eval, is_colab=is_colab)
+
+
+# Single shared instance — import this in every script
+cfg = _load()

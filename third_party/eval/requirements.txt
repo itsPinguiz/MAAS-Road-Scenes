@@ -15,4 +15,7 @@ scipy==1.17.1
 # https://pytorch.org/get-started/locally/
 # Example for CUDA 11.8: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 torch==2.10.0
+PyYAML
+rich
+beautifulsoup4
 

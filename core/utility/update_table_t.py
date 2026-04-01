@@ -1,7 +1,10 @@
 import os
+import sys
 from bs4 import BeautifulSoup
 
-TABLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TABLE_T.md")
+from core.utility.config_loader import cfg
+
+TABLE_PATH = cfg.paths.tables.temperature
 
 DATASET_TO_COL_INDEX = {
     'RoadAnomaly21': 0,
@@ -11,7 +14,7 @@ DATASET_TO_COL_INDEX = {
     'RoadAnomaly': 4
 }
 
-def update_table_t_entry(model: str, method: str, dataset: str, auprc: str, fpr95: str):
+def update_table_t_entry(model: str, method: str, dataset: str = None, auprc: str = None, fpr95: str = None, miou: str = None):
     """
     Updates the TABLE_T.md file with the given metrics using BeautifulSoup.
     """
@@ -52,6 +55,13 @@ def update_table_t_entry(model: str, method: str, dataset: str, auprc: str, fpr9
                 is_match = (row_method == target_method) or (target_method == 'maxentropy' and row_method == 'max entropy')
                 
                 if is_match:
+                    # Update mIoU if provided
+                    if miou is not None and miou != '-':
+                        miou_idx = base_idx + 1
+                        if miou_idx < len(tds):
+                            tds[miou_idx].string = str(miou)
+
+                    # Update AuPRC and FPR95 for specific dataset
                     if dataset and auprc and fpr95 and dataset in DATASET_TO_COL_INDEX:
                         ds_col = DATASET_TO_COL_INDEX[dataset]
                         metrics_start_idx = base_idx + 2

@@ -1,7 +1,10 @@
 import os
+import sys
 from bs4 import BeautifulSoup
 
-TABLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TABLE.md")
+from core.utility.config_loader import cfg
+
+TABLE_PATH = cfg.paths.tables.main
 
 # Datasets in the order they appear in the HTML table
 DATASET_TO_COL_INDEX = {
