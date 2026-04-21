@@ -121,6 +121,236 @@ core/evaluation/eomt/.venv_eomt/bin/python core/analysis/eval_resolution_attenti
 
 ---
 
+## Project Status & Results
+
+Based on the evaluations run in the `results` folder, here is an overview of the project's performance and findings so far.
+
+### 1. Main Performance Metrics
+
+*Baseline evaluations across standard anomaly detection benchmarks.*
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+<th></th>
+<th colspan="2">SMIYC RA-21</th>
+<th colspan="2">SMIYC RO-21</th>
+<th colspan="2">FS L&amp;F</th>
+<th colspan="2">FS Static</th>
+<th colspan="2">Road Anomaly</th>
+</tr>
+<tr>
+<th>Model</th>
+<th>Method</th>
+<th>mIoU</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td rowspan="3">ERFNET</td>
+<td>MSP</td>
+<td>72.17</td>
+<td>29.10</td><td>62.55</td>
+<td>2.71</td><td>65.22</td>
+<td>1.75</td><td>50.59</td>
+<td>7.47</td><td>41.84</td>
+<td>12.42</td><td>82.58</td>
+</tr>
+<tr>
+<td>MaxLogit</td>
+<td>72.17</td>
+<td>38.32</td><td>59.34</td>
+<td>4.63</td><td>48.44</td>
+<td>3.30</td><td>45.49</td>
+<td>9.50</td><td>40.30</td>
+<td>15.58</td><td>73.25</td>
+</tr>
+<tr>
+<td>Max Entropy</td>
+<td>72.17</td>
+<td>30.97</td><td>62.66</td>
+<td>3.04</td><td>65.91</td>
+<td>2.58</td><td>50.16</td>
+<td>8.84</td><td>41.55</td>
+<td>12.67</td><td>82.75</td>
+</tr>
+<tr>
+<td rowspan="4">EoMT</td>
+<td>MSP</td>
+<td>60.27</td>
+<td>68.10</td><td>30.39</td>
+<td>94.18</td><td>0.37</td>
+<td>16.37</td><td>12.98</td>
+<td>58.17</td><td>43.60</td>
+<td>71.35</td><td>15.48</td>
+</tr>
+<tr>
+<td>MaxLogit</td>
+<td>60.27</td>
+<td>67.49</td><td>31.57</td>
+<td>94.21</td><td>0.36</td>
+<td>16.35</td><td>12.74</td>
+<td>58.35</td><td>47.12</td>
+<td>70.77</td><td>15.09</td>
+</tr>
+<tr>
+<td>Max Entropy</td>
+<td>60.27</td>
+<td>68.14</td><td>30.60</td>
+<td>94.28</td><td>0.35</td>
+<td>18.64</td><td>12.79</td>
+<td>57.00</td><td>43.89</td>
+<td>73.33</td><td>14.71</td>
+</tr>
+<tr>
+<td>RbA</td>
+<td>60.27</td>
+<td>62.67</td><td>96.07</td>
+<td>93.51</td><td>0.42</td>
+<td>16.48</td><td>9.02</td>
+<td>60.54</td><td>73.93</td>
+<td>70.13</td><td>15.14</td>
+</tr>
+</tbody>
+</table>
+
+### 2. Temperature Scaling Analysis
+
+*Evaluating the impact of calibration on Max Softmax Probability.*
+
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+<th></th>
+<th colspan="2">SMIYC RA-21</th>
+<th colspan="2">SMIYC RO-21</th>
+<th colspan="2">FS L&amp;F</th>
+<th colspan="2">FS Static</th>
+<th colspan="2">Road Anomaly</th>
+</tr>
+<tr>
+<th>Model</th>
+<th>Method</th>
+<th>mIoU</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+<th>AuPRC</th>
+<th>FPR95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td rowspan="4">ERFNET</td>
+<td>MSP (t = 0.5)</td>
+<td></td>
+<td>27.06</td><td>62.73</td>
+<td>2.42</td><td>63.23</td>
+<td>1.27</td><td>66.73</td>
+<td>4.48</td><td>42.42</td>
+<td>12.19</td><td>82.02</td>
+</tr>
+<tr>
+<td>MSP (t = 0.75)</td>
+<td></td>
+<td>28.16</td><td>62.49</td>
+<td>2.57</td><td>64.13</td>
+<td>1.48</td><td>51.73</td>
+<td>4.73</td><td>41.51</td>
+<td>12.32</td><td>82.31</td>
+</tr>
+<tr>
+<td>MSP (t = 1.1)</td>
+<td></td>
+<td>29.40</td><td>62.65</td>
+<td>2.76</td><td>65.87</td>
+<td>1.84</td><td>50.14</td>
+<td>5.17</td><td>40.71</td>
+<td>12.46</td><td>82.73</td>
+</tr>
+<tr>
+<td>MSP (best t)</td>
+<td></td>
+<td>29.40</td><td>62.65</td>
+<td>2.76</td><td>65.87</td>
+<td>1.84</td><td>50.14</td>
+<td>5.17</td><td>40.71</td>
+<td>12.46</td><td>82.73</td>
+</tr>
+<tr>
+<td rowspan="4">EoMT</td>
+<td>MSP (t = 0.5)</td>
+<td></td>
+<td>67.94</td><td>30.38</td>
+<td>94.16</td><td>0.37</td>
+<td>16.32</td><td>13.01</td>
+<td>22.88</td><td>42.82</td>
+<td>71.15</td><td>15.68</td>
+</tr>
+<tr>
+<td>MSP (t = 0.75)</td>
+<td></td>
+<td>68.03</td><td>30.39</td>
+<td>94.17</td><td>0.37</td>
+<td>16.32</td><td>13.00</td>
+<td>22.89</td><td>42.82</td>
+<td>71.27</td><td>15.53</td>
+</tr>
+<tr>
+<td>MSP (t = 1.1)</td>
+<td></td>
+<td>68.12</td><td>30.39</td>
+<td>94.18</td><td>0.37</td>
+<td>16.33</td><td>13.00</td>
+<td>22.90</td><td>42.83</td>
+<td>71.38</td><td>15.47</td>
+</tr>
+<tr>
+<td>MSP (best t)</td>
+<td></td>
+<td>68.12</td><td>30.39</td>
+<td>94.18</td><td>0.37</td>
+<td>16.33</td><td>13.00</td>
+<td>22.90</td><td>42.83</td>
+<td>71.38</td><td>15.47</td>
+</tr>
+</tbody>
+</table>
+
+### 3. Fine-Grained Analysis Report
+
+The detailed analysis of **ERFNet** and **EoMT** reveals critical vulnerabilities that global metrics tend to mask:
+1. **The Boundary & Depth Problem:** A drastic performance drop occurs on semantic boundaries (e.g., FPR95 spikes from 61.94% to 90.43% for ERFNet). Additionally, both models exhibit "Vertical Blindness," failing entirely to detect distant anomalies at the horizon.
+2. **The Scale & Taxonomy Problem:** Vision Transformers like EoMT struggle significantly with small objects, performing poorly compared to large objects. Furthermore, both models demonstrate an "absorption" effect, mistakenly assigning anomalies to dominant background classes (such as "Road", "Vegetation", or "Truck").
+3. **Resolution Trade-off & Attention Failure:** Increasing input resolution improves small object detection but hinders real-time capabilities (FPS). Moreover, ViT attention maps often focus on surrounding classes instead of the anomaly itself, failing to trigger the uncertainty signal.
+
+For the full breakdown and visualizations, refer to the complete [REPORT.md](results/REPORT.md).
+
+### 4. Proposed Solutions
+
+*(This section is reserved for upcoming architectural improvements and methodological solutions designed to address the boundary uncertainty, depth blindness, and scale-related issues identified in the analysis report.)*
+
+---
+
 ##  Credits & Citations
 
 This project integrates and builds upon several incredible open-source contributions. We extend our gratitude to the authors of the following papers:
