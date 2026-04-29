@@ -51,3 +51,4 @@ env.bak/
 venv.bak/
 venv_eomt/
 venv_eval/
+results/solutions/*.pth

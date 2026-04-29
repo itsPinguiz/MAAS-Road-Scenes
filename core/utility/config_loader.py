@@ -52,14 +52,15 @@ def _load() -> SimpleNamespace:
 
     ns_eval = dict_to_ns(raw["eval"])
     ns_analysis = dict_to_ns(raw["analysis"])
+    ns_solutions = dict_to_ns(raw.get("solutions", {}))
 
     return SimpleNamespace(
         paths=ns_paths, 
         eval=ns_eval, 
         analysis=ns_analysis,
+        solutions=ns_solutions,
         is_colab=is_colab
     )
-
 
 # Single shared instance — import this in every script
 cfg = _load()
