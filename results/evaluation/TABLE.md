@@ -58,7 +58,7 @@
 <tr>
 <td rowspan="4">EoMT</td>
 <td>MSP</td>
-<td>52.85</td>
+<td>60.27</td>
 <td>68.10</td><td>30.39</td>
 <td>94.18</td><td>0.37</td>
 <td>16.37</td><td>12.98</td>
@@ -67,7 +67,7 @@
 </tr>
 <tr>
 <td>MaxLogit</td>
-<td>52.85</td>
+<td>60.27</td>
 <td>67.49</td><td>31.57</td>
 <td>94.21</td><td>0.36</td>
 <td>16.35</td><td>12.74</td>
@@ -76,7 +76,7 @@
 </tr>
 <tr>
 <td>Max Entropy</td>
-<td>52.85</td>
+<td>60.27</td>
 <td>68.14</td><td>30.60</td>
 <td>94.28</td><td>0.35</td>
 <td>18.64</td><td>12.79</td>
@@ -85,7 +85,7 @@
 </tr>
 <tr>
 <td>RbA</td>
-<td>52.85</td>
+<td>60.27</td>
 <td>62.67</td><td>96.07</td>
 <td>93.51</td><td>0.42</td>
 <td>16.48</td><td>9.02</td>

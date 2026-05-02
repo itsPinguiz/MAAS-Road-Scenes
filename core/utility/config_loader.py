@@ -53,12 +53,14 @@ def _load() -> SimpleNamespace:
     ns_eval = dict_to_ns(raw["eval"])
     ns_analysis = dict_to_ns(raw["analysis"])
     ns_solutions = dict_to_ns(raw.get("solutions", {}))
+    ns_pipeline = dict_to_ns(raw.get("pipeline", {}))
 
     return SimpleNamespace(
         paths=ns_paths, 
         eval=ns_eval, 
         analysis=ns_analysis,
         solutions=ns_solutions,
+        pipeline=ns_pipeline,
         is_colab=is_colab
     )
 

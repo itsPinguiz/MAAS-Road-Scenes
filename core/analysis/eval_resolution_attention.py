@@ -113,12 +113,11 @@ def gt_path_from_image(image_path: str, dataset_type: str) -> str:
         gt = gt.replace(".jpg", ".png")
     return gt
 
-def load_erfnet():
+def load_erfnet(weightspath=cfg.paths.models.erfnet_weights):
     model = ERFNet(NUM_CLASSES_ERFNET)
     if DEVICE.type == "cuda":
         model = torch.nn.DataParallel(model).cuda()
     
-    weightspath = cfg.paths.models.erfnet_weights
     if not os.path.isabs(weightspath):
         weightspath = os.path.join(cfg.paths.root, weightspath)
         
@@ -192,7 +191,7 @@ class ResAttnAnalyser:
                 logger.warning("No image with anomaly found for attention extraction.")
 
     def _run_resolution_eval(self, image_paths):
-        model = load_erfnet()
+        model = load_erfnet(self.eomt_weights_path)
         results = []
         
         for short_side in self.resolutions:

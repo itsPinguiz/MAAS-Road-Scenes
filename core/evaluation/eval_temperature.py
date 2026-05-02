@@ -83,7 +83,7 @@ def main():
     TEMPS = cfg.eval.temperatures
     DATASETS = {
         'RoadAnomaly21':           cfg.paths.datasets.road_anomaly21,
-        'RoadObsticle21':          cfg.paths.datasets.road_obsticle21,
+        'RoadObsticle21':          cfg.paths.datasets.road_obstacle21,
         'Fishyscapes Lost & Found': cfg.paths.datasets.fishyscapes_lost_found,
         'Fishyscapes Static':      cfg.paths.datasets.fishyscapes_static,
         'RoadAnomaly':             cfg.paths.datasets.road_anomaly,
@@ -102,7 +102,8 @@ def main():
 
     for ds_name, ds_pattern in DATASETS.items():
         ds_slug = ds_name.replace(" ", "_")
-        current_logits_path = os.path.join(args.logits_dir, ds_slug)
+        ckpt_name = os.path.splitext(os.path.basename(cfg.paths.models.eomt_checkpoint if args.model == 'EOMT' else cfg.paths.models.erfnet_weights))[0]
+        current_logits_path = os.path.join(args.logits_dir, ckpt_name, ds_slug)
         logit_files = glob.glob(os.path.join(current_logits_path, "*.pt"))
         
         if not logit_files:

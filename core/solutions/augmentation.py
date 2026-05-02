@@ -170,13 +170,40 @@ class PerspectiveOutlierPasting:
         aug_mask = mask.clone()
         ood_binary_mask = torch.zeros_like(mask, dtype=torch.bool)
         
-        # Blend (Pasting forte controllato da alpha)
-        # Sostituiamo i pixel o effettuiamo blending
+        import torchvision.transforms as T
+        import torchvision.transforms.functional as TF
+        
+        # 1. Color Matching/Jitter (range [0, 1])
+        jitter = T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05)
+        valid_outlier_img = jitter(valid_outlier_img)
+        
+        # FIX: Normalize outlier to match base Cityscapes ImageNet normalization
+        mean = torch.tensor([0.485, 0.456, 0.406], device=valid_outlier_img.device).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=valid_outlier_img.device).view(3, 1, 1)
+        valid_outlier_img = (valid_outlier_img - mean) / std
+        
+        # 2. Gaussian Noise su patch rimosso: applicheremo noise globale alla fine
+        
+        # 3. Edge Blurring (Feathering)
+        k_size = max(3, int(min(target_H, target_W) * 0.08))
+        if k_size % 2 == 0:
+            k_size += 1
+            
+        feathered_mask = TF.gaussian_blur(
+            valid_outlier_mask.unsqueeze(0), 
+            kernel_size=[k_size, k_size], 
+            sigma=[max(1.0, k_size / 3.0), max(1.0, k_size / 3.0)]
+        ).squeeze(0)
+        
+        alpha_mask = feathered_mask * self.alpha
+        
+        # Blend (Pasting forte controllato da alpha sfocata per feathering)
+        # Effettuiamo blending solo sui pixel interni (evitando dark halos)
         for c in range(C):
             patch = aug_image[c, y_min:y_max, x_min:x_max]
             patch[valid_outlier_mask_bool] = (
-                (1.0 - self.alpha) * patch[valid_outlier_mask_bool] +
-                self.alpha * valid_outlier_img[c, valid_outlier_mask_bool]
+                (1.0 - alpha_mask[valid_outlier_mask_bool]) * patch[valid_outlier_mask_bool] +
+                alpha_mask[valid_outlier_mask_bool] * valid_outlier_img[c, valid_outlier_mask_bool]
             )
             aug_image[c, y_min:y_max, x_min:x_max] = patch
             
@@ -184,6 +211,10 @@ class PerspectiveOutlierPasting:
         patch_ood = ood_binary_mask[y_min:y_max, x_min:x_max]
         patch_ood[valid_outlier_mask_bool] = True
         ood_binary_mask[y_min:y_max, x_min:x_max] = patch_ood
+        
+        # 2. Global Gaussian Noise (to mask compression differences without creating a local beacon)
+        global_noise = torch.randn_like(aug_image) * 0.05
+        aug_image = aug_image + global_noise
         
         # Volendo si mappa 'aug_mask' impostando un indice OOD riservato temporaneamente
         # ma spesso è meglio usare `ood_binary_mask` durante il training per differenziare In-Dist vs Out-Dist.

@@ -168,7 +168,8 @@ def main():
 
         for path in input_paths:
             base_name = osp.splitext(osp.basename(path))[0]
-            save_dir = osp.join("saved_logits", "erfnet", args.dataset_name.replace(" ", "_"))
+            ckpt_name = osp.splitext(osp.basename(args.loadWeights))[0]
+            save_dir = osp.join("saved_logits", "erfnet", ckpt_name, args.dataset_name.replace(" ", "_"))
             save_path = osp.join(save_dir, f"{base_name}.pt")
             
             # --- LOGICA IBRIDA: CARICAMENTO O INFERENZA ---

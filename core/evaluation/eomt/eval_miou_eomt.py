@@ -215,7 +215,8 @@ def main():
                 metric.update(preds, label_tensor)
                 
                 if args.save_logits:
-                    save_dir = os.path.join("saved_logits", "eomt", "Cityscapes")
+                    ckpt_name = os.path.splitext(os.path.basename(args.ckpt_path))[0]
+                    save_dir = os.path.join("saved_logits", "eomt", ckpt_name, "Cityscapes")
                     os.makedirs(save_dir, exist_ok=True)
                     # Save as .pt file with the same basename as image
                     save_name = os.path.basename(img_path).replace(".png", ".pt")

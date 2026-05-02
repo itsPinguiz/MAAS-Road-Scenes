@@ -62,7 +62,7 @@ datasets = {
     'Fishyscapes Lost & Found': cfg.paths.datasets.fishyscapes_lost_found,
     'RoadAnomaly':             cfg.paths.datasets.road_anomaly,
     'RoadAnomaly21':           cfg.paths.datasets.road_anomaly21,
-    'RoadObsticle21':          cfg.paths.datasets.road_obsticle21,
+    'RoadObsticle21':          cfg.paths.datasets.road_obstacle21,
 }
 
 methods = ['msp', 'maxlogit', 'maxentropy']
@@ -88,7 +88,8 @@ with Progress(
             "--input", dataset_path,
             "--quiet",
             "--save_logits",
-            "--dataset_name", dataset_name
+            "--dataset_name", dataset_name,
+            "--loadWeights", os.path.join(_ROOT, cfg.paths.models.erfnet_weights)
         ]
         
         result = subprocess.run(cmd, capture_output=True, text=True)

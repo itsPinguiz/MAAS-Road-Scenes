@@ -177,7 +177,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument(
         "--input",
-        default=cfg.paths.datasets.road_obsticle21,
+        default=cfg.paths.datasets.road_obstacle21,
         nargs="+",
         help="A list of space separated input images; or a single glob pattern",
     )  
@@ -214,7 +214,8 @@ def main():
 
         for path in input_paths:
             base_name = osp.splitext(osp.basename(path))[0]
-            save_dir = osp.join("saved_logits", "eomt", args.dataset_name.replace(" ", "_"))
+            ckpt_name = osp.splitext(osp.basename(args.ckpt_path))[0]
+            save_dir = osp.join("saved_logits", "eomt", ckpt_name, args.dataset_name.replace(" ", "_"))
             save_path = osp.join(save_dir, f"{base_name}.pt")
 
             # Inizializziamo le variabili per evitare errori nel 'del' finale

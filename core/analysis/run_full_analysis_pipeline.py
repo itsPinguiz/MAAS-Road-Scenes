@@ -128,13 +128,18 @@ def main():
     python_exec = sys.executable
 
     for model_name, model_info in MODELS.items():
+        if model_name == "ERFNet" and not getattr(cfg.pipeline, "run_erfnet", True):
+            continue
+        if model_name == "EoMT" and not getattr(cfg.pipeline, "run_eomt", True):
+            continue
             
         for d in DATASETS:
             dataset_name = d["name"]
             dataset_type = d["type"]
             images_glob = d["images_glob"] 
             
-            logits_dir = root_dir / model_info["logits_base"] / d["logits_folder"]
+            ckpt_name = os.path.splitext(os.path.basename(cfg.paths.models.eomt_checkpoint if model_name == "EoMT" else cfg.paths.models.erfnet_weights))[0]
+            logits_dir = root_dir / model_info["logits_base"] / ckpt_name / d["logits_folder"]
 
             out_dir = reports_dir / model_name / dataset_name
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -168,7 +173,8 @@ def main():
                 str(script_res_attn),
                 "--images_glob", str(d["images_glob"]),
                 "--dataset_type", dataset_type,
-                "--out_dir", str(out_dir)
+                "--out_dir", str(out_dir),
+                "--model_weights", os.path.join(str(root_dir), cfg.paths.models.eomt_checkpoint if model_name == "EoMT" else cfg.paths.models.erfnet_weights)
             ]
             
             # Specific execution rule for Task 3 based on the model:

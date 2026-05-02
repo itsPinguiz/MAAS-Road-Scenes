@@ -66,32 +66,36 @@ def main():
     eomt_venv_python = cfg.paths.venvs.eomt_python
 
     # --- STEP 1: EVAL (ERFNET) ---
-    logger.info("\n[bold]Step 1: Running ERFNet Evaluations...[/bold]")
-    run_script(eval_venv_python, "eval_iou.py", eval_dir, ["--save_logits"])
-    run_script(eval_venv_python, "run_all_evals.py", eval_dir)
+    if getattr(cfg.pipeline, "run_erfnet", True):
+        logger.info("\n[bold]Step 1: Running ERFNet Evaluations...[/bold]")
+        run_script(eval_venv_python, "eval_iou.py", eval_dir, ["--save_logits"])
+        run_script(eval_venv_python, "run_all_evals.py", eval_dir)
 
     # --- STEP 2: EOMT ---
-    logger.info("\n[bold]Step 2: Running EoMT Evaluations...[/bold]")
-    run_script(eomt_venv_python, "eval_miou_eomt.py", eomt_dir, ["--save_logits"])
-    run_script(eomt_venv_python, "run_all_evals_eomt.py", eomt_dir)
+    if getattr(cfg.pipeline, "run_eomt", True):
+        logger.info("\n[bold]Step 2: Running EoMT Evaluations...[/bold]")
+        run_script(eomt_venv_python, "eval_miou_eomt.py", eomt_dir, ["--save_logits"])
+        run_script(eomt_venv_python, "run_all_evals_eomt.py", eomt_dir)
 
     # --- STEP 3: TEMPERATURE (ERFNET) ---
-    logger.info("\n[bold]Step 3: Calculating Temperature metrics (ERFNet)...[/bold]")
-    run_script(
-        eval_venv_python, 
-        "eval_temperature.py", 
-        os.path.join(root_dir, "core", "evaluation"), 
-        ["--model", "ERFNET", "--logits_dir", cfg.paths.logits.erfnet]
-    )
+    if getattr(cfg.pipeline, "run_erfnet", True):
+        logger.info("\n[bold]Step 3: Calculating Temperature metrics (ERFNet)...[/bold]")
+        run_script(
+            eval_venv_python, 
+            "eval_temperature.py", 
+            os.path.join(root_dir, "core", "evaluation"), 
+            ["--model", "ERFNET", "--logits_dir", cfg.paths.logits.erfnet]
+        )
 
     # --- STEP 4: TEMPERATURE (EOMT) ---
-    logger.info("\n[bold]Step 4: Calculating Temperature metrics (EoMT)...[/bold]")
-    run_script(
-        eomt_venv_python, 
-        "eval_temperature.py", 
-        os.path.join(root_dir, "core", "evaluation"), 
-        ["--model", "EOMT", "--logits_dir", cfg.paths.logits.eomt]
-    )
+    if getattr(cfg.pipeline, "run_eomt", True):
+        logger.info("\n[bold]Step 4: Calculating Temperature metrics (EoMT)...[/bold]")
+        run_script(
+            eomt_venv_python, 
+            "eval_temperature.py", 
+            os.path.join(root_dir, "core", "evaluation"), 
+            ["--model", "EOMT", "--logits_dir", cfg.paths.logits.eomt]
+        )
     
     # --- FINAL TIMER ---
     total_elapsed = time.perf_counter() - total_start

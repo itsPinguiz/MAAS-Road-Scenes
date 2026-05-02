@@ -185,7 +185,8 @@ def main(args):
             iouEvalVal.addBatch(pred, gt_t)
 
             if args.save_logits:
-                save_dir = os.path.join("saved_logits", "erfnet", "Cityscapes")
+                ckpt_name = os.path.splitext(os.path.basename(args.loadWeights))[0]
+                save_dir = os.path.join("saved_logits", "erfnet", ckpt_name, "Cityscapes")
                 os.makedirs(save_dir, exist_ok=True)
                 # Save as .pt file with the same basename as image
                 save_name = os.path.basename(img_path).replace(".png", ".pt")
