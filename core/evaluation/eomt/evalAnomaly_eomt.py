@@ -125,10 +125,9 @@ def load_eomt_model(ckpt_path):
 
     return model
 
-def get_dense_logits(model, img_tensor):
+def get_dense_logits(model, img_tensor, crop_batch_size=2):
     """
-    Versione ottimizzata per GPU con poca VRAM (es. 4GB).
-    Usa elaborazione sequenziale dei crop e Automatic Mixed Precision.
+    Versione ottimizzata con Crop Batching e Automatic Mixed Precision.
     """
     # 1. Taglia l'immagine grande in crop
     crops, origins = model.window_imgs_semantic(img_tensor)
@@ -136,16 +135,20 @@ def get_dense_logits(model, img_tensor):
     final_mask_logits_list = []
     final_class_logits_list = []
     
+    if not torch.is_tensor(crops):
+        crops = torch.stack(crops)
+        
+    num_crops = crops.shape[0]
+    
     # 2. Usa AMP (Mixed Precision) per dimezzare l'uso della VRAM
     with torch.autocast(device_type='cuda', dtype=torch.float16):
         
-        # Gestisce i crop in modo sequenziale (uno alla volta) invece che in un singolo batch
-        num_crops = crops.shape[0] if torch.is_tensor(crops) else len(crops)
-        for i in range(num_crops):
-            crop = crops[i:i+1] if torch.is_tensor(crops) else crops[i].unsqueeze(0)
+        # Gestisce i crop in batch
+        for i in range(0, num_crops, crop_batch_size):
+            crop_batch = crops[i:i+crop_batch_size]
             
-            # Forward pass solo per questo specifico crop
-            mask_logits_per_layer, class_logits_per_layer = model(crop)
+            # Forward pass per questo specifico batch di crop
+            mask_logits_per_layer, class_logits_per_layer = model(crop_batch)
             
             # Salviamo solo l'ultimo layer e forziamo a float32 per evitare problemi matematici dopo
             final_mask_logits_list.append(mask_logits_per_layer[-1].float())
@@ -173,6 +176,23 @@ def get_dense_logits(model, img_tensor):
     
     return dense_logits[0].unsqueeze(0), final_mask_logits, final_class_logits
 
+from torch.utils.data import Dataset, DataLoader
+
+class AnomalyDataset(Dataset):
+    def __init__(self, paths):
+        self.paths = paths
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        img_pil = Image.open(path).convert('RGB')
+        w, h = img_pil.size
+        img_np_temp = np.array(img_pil)
+        img_tensor = torch.from_numpy(img_np_temp).permute(2, 0, 1).float() / 255.0
+        return img_tensor, path, w, h
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(
@@ -186,6 +206,8 @@ def main():
     parser.add_argument('--dataset_name', default='default_dataset', help='Name of the dataset for organizing saved logits folder')
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use for computation (e.g., "cpu", "cuda:0")')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
+    parser.add_argument('--num-workers', type=int, default=4, help='Number of background workers for DataLoader')
+    parser.add_argument('--crop-batch-size', type=int, default=2, help='Batch size for crop window inference')
     args = parser.parse_args()
 
     # Dictionary to store anomaly scores for each method
@@ -202,6 +224,9 @@ def main():
         logger.error(f"No images found for pattern: {args.input[0]}")
         return
 
+    dataset = AnomalyDataset(input_paths)
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=args.num_workers, shuffle=False, pin_memory=True)
+
     with Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
@@ -212,14 +237,16 @@ def main():
     ) as progress:
         task_id = progress.add_task("Evaluating EoMT", total=len(input_paths))
 
-        for path in input_paths:
+        for batch_idx, (img_tensor_batch, path_batch, w_batch, h_batch) in enumerate(dataloader):
+            path = path_batch[0]
+            w = w_batch[0].item()
+            h = h_batch[0].item()
+            img_tensor = img_tensor_batch.to(device)
+
             base_name = osp.splitext(osp.basename(path))[0]
             ckpt_name = osp.splitext(osp.basename(args.ckpt_path))[0]
             save_dir = osp.join("saved_logits", "eomt", ckpt_name, args.dataset_name.replace(" ", "_"))
             save_path = osp.join(save_dir, f"{base_name}.pt")
-
-            # Inizializziamo le variabili per evitare errori nel 'del' finale
-            img_tensor = None 
 
             # --- LOGICA IBRIDA: CARICAMENTO O INFERENZA ---
             if osp.exists(save_path):
@@ -227,19 +254,12 @@ def main():
                 dense_logits = torch.load(save_path, map_location=device)
             else:
                 # Esecuzione inferenza (Richiede GPU)
-                img_np_temp = np.array(Image.open(path).convert('RGB'))
-                img_tensor = torch.from_numpy(img_np_temp).permute(2, 0, 1).unsqueeze(0).float().to(device) / 255.0
-                
                 with torch.no_grad():
-                    dense_logits, _, _ = get_dense_logits(model, img_tensor)
+                    dense_logits, _, _ = get_dense_logits(model, img_tensor, crop_batch_size=args.crop_batch_size)
                     
                     if args.save_logits:
                         os.makedirs(save_dir, exist_ok=True)
                         torch.save(dense_logits.cpu(), save_path)
-        
-            # Recuperiamo le dimensioni originali per il resize della maschera GT
-            # Se non abbiamo fatto l'inferenza, dobbiamo comunque leggere l'immagine per le dimensioni
-            w, h = Image.open(path).size
     
             # Calcolo simultaneo dei 4 punteggi
             anomaly_result_msp = compute_msp_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
@@ -291,8 +311,6 @@ def main():
     if len(ood_gts_list) == 0:
         logger.warning("No valid evaluations found.")
         return
-
-    file.write("\n")
     
     # Flatten lists for metrics
     ood_gts = np.concatenate([gt.flatten() for gt in ood_gts_list])
@@ -332,8 +350,6 @@ def main():
             logger.info(f"AuPRC:   {prc_auc*100.0:.2f}")
             logger.info(f"FPR95:   {fpr*100.0:.2f}")
             logger.info("---------------------------------------")
-            
-        file.write((f'Dataset: {args.dataset_name}    Method: {method.upper()}    AUPRC score: {prc_auc*100.0:.2f}   FPR@TPR95: {fpr*100.0:.2f}\n'))
         
         # Update TABLE.md directly
         from core.utility.update_table import update_table_entry

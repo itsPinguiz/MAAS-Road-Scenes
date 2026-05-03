@@ -2,6 +2,10 @@ import os
 import sys
 import yaml
 import importlib
+import gc
+
+# FIX OOM: riduce la frammentazione della memoria CUDA su run lunghe
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 
 # Assicuriamoci che python estragga la base root del progetto per i moduli core.*
 _SOLUTIONS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -153,6 +157,10 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
             
         del mask_logits_list, class_logits_list, final_mask_logits, final_class_logits, dense_logits, losses, loss, loss_ce, loss_ood
         torch.cuda.empty_cache()
+        
+        # FIX OOM: garbage collection periodico per evitare frammentazione su batch lunghi
+        if batch_idx % 200 == 0:
+            gc.collect()
 
     avg_ce = total_ce_loss / len(dataloader)
     avg_ood = total_ood_loss / len(dataloader)
@@ -164,13 +172,15 @@ def run_finetuning():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Device attivo: [bold cyan]{device}[/bold cyan]", extra={"markup": True})
     
-    results_dir = os.path.join(cfg.paths.root, cfg.solutions.training.results_dir)
-    os.makedirs(results_dir, exist_ok=True)
-    logger.info(f"I log e checkpoint verranno salvati in: {results_dir}")
+    # --- Checkpoint directory (save & resume) — from config ---
+    ckpt_dir = os.path.join(cfg.paths.root, cfg.solutions.training.checkpoint_dir)
+    os.makedirs(ckpt_dir, exist_ok=True)
+    logger.info(f"Checkpoint dir: {ckpt_dir}")
     
-    eomt_ckpt_path = os.path.join(cfg.paths.root, "checkpoints/epoch_106-step_19902_eomt.ckpt")
+    # --- Base pretrained weights (from config) ---
+    base_ckpt_path = os.path.join(cfg.paths.root, cfg.paths.models.eomt_checkpoint)
     
-    model = build_model_eomt(eomt_ckpt_path, device, num_classes=19, img_size=(1024, 1024))
+    model = build_model_eomt(base_ckpt_path, device, num_classes=19, img_size=(1024, 1024))
     
     # Congela l'Encoder DINOv2 per proteggere le feature stradali da catastrophic forgetting
     for param in model.network.encoder.parameters():
@@ -273,20 +283,48 @@ def run_finetuning():
         ignore_index=19
     )
     
-    dataloader = DataLoader(dataset, batch_size=cfg.solutions.training.batch_size, shuffle=True, num_workers=cfg.solutions.training.num_workers)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=cfg.solutions.training.batch_size,
+        shuffle=True,
+        num_workers=cfg.solutions.training.num_workers,
+        persistent_workers=True,   # FIX: evita corruzione shared-memory tra worker e main process
+    )
     
+    # --- Resume or fresh train — controlled by cfg.solutions.training.resume ---
+    import glob as _glob
+    do_resume = getattr(cfg.solutions.training, 'resume', False)
+    start_epoch = 1
+
+    if do_resume:
+        existing_ckpts = sorted(
+            _glob.glob(os.path.join(ckpt_dir, "epoch_*_EoMT.pth")),
+            key=lambda p: int(os.path.basename(p).split('_')[1])
+        )
+        if existing_ckpts:
+            latest_ckpt = existing_ckpts[-1]
+            start_epoch = int(os.path.basename(latest_ckpt).split('_')[1]) + 1
+            logger.info(f"[resume=true] Caricamento checkpoint: {latest_ckpt} (prossima epoch: {start_epoch})")
+            resume_sd = torch.load(latest_ckpt, map_location=device)
+            model.load_state_dict(resume_sd, strict=True)
+            logger.success(f"Checkpoint caricato — ripresa da epoch {start_epoch}")
+        else:
+            logger.warning(f"[resume=true] Nessun checkpoint trovato in {ckpt_dir} — training da zero.")
+    else:
+        logger.info("[resume=false] Training da zero (nessun checkpoint caricato).")
+
     epochs = cfg.solutions.training.epochs
-    for epoch in range(1, epochs + 1):
+    for epoch in range(start_epoch, epochs + 1):
         logger.info(f"\n[bold green]=== Start Epoch {epoch}/{epochs} ===[/bold green]")
         
-        # FIX: Rimossa la variabile scaler dalla funzione train_epoch
         avg_ce, avg_ood = train_epoch(model, dataloader, optimizer, loss_fn, device)
         
         logger.success(f"End Epoch {epoch} | Avg CE Loss: {avg_ce:.4f} | Avg OOD Loss: {avg_ood:.4f}")
         
-        ckpt_path = os.path.join(results_dir, f"epoch_{epoch}_EoMT.pth")
+        ckpt_path = os.path.join(ckpt_dir, f"epoch_{epoch}_EoMT.pth")
         try:
             torch.save(model.state_dict(), ckpt_path)
+            logger.info(f"Checkpoint salvato: {ckpt_path}")
         except Exception as e:
             logger.error(f"Errore salvataggio checkpoint: {e}")
 

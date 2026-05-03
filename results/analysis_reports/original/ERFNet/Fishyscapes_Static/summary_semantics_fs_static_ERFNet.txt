@@ -1,0 +1,21 @@
+======================================================================
+  Semantic Analysis Summary  |  Model: ERFNet  |  Dataset: fs_static
+======================================================================
+
+  REGION ANALYSIS
+  Method          Region          AuPRC %    FPR95 %
+  --------------------------------------------------
+  MSP             boundary          67.34      59.58
+                  flat               3.68      43.60
+  MAXLOGIT        boundary          66.19      60.44
+                  flat               4.40      43.42
+  MAXENTROPY      boundary          67.53      59.75
+                  flat               4.24      43.40
+
+  DEPTH BAND ANALYSIS (AuPRC %)
+  Method                Far (B0)   Mid-far (B1)   Mid-far (B2)  Mid-near (B3)      Near (B4)
+  ------------------------------------------------------------------------------------------
+  MSP                        nan           0.68           9.30          44.15           4.10
+  MAXLOGIT                   nan           1.01           8.87          54.99          26.58
+  MAXENTROPY                 nan           0.71          10.05          50.58           8.05
+======================================================================

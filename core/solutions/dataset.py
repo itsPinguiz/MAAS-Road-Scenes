@@ -20,7 +20,7 @@ class OutlierAugmentedDataset(Dataset):
         self, 
         base_dataset: Dataset, 
         outliers_dir: str, 
-        ignore_index: int = 254, # Puoi usare 255 se è il default Cityscapes
+        ignore_index: int = 19,  # deve corrispondere a ignore_index in CombinedFineTuningLoss
         transform: PerspectiveOutlierPasting = None
     ):
         """

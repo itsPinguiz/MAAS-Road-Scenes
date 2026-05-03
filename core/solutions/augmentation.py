@@ -24,6 +24,7 @@ class PerspectiveOutlierPasting:
         self.boundary_rate = self.config.boundary_rate
         self.boundary_classes = self.config.boundary_classes
         self.alpha = self.config.alpha
+        self.edge_feathering = getattr(self.config, 'edge_feathering', False)
 
     def get_bimodal_scale(self) -> float:
         """
@@ -184,18 +185,20 @@ class PerspectiveOutlierPasting:
         
         # 2. Gaussian Noise su patch rimosso: applicheremo noise globale alla fine
         
-        # 3. Edge Blurring (Feathering)
-        k_size = max(3, int(min(target_H, target_W) * 0.08))
-        if k_size % 2 == 0:
-            k_size += 1
-            
-        feathered_mask = TF.gaussian_blur(
-            valid_outlier_mask.unsqueeze(0), 
-            kernel_size=[k_size, k_size], 
-            sigma=[max(1.0, k_size / 3.0), max(1.0, k_size / 3.0)]
-        ).squeeze(0)
-        
-        alpha_mask = feathered_mask * self.alpha
+        # 3. Edge Blurring (Feathering) — disabilitabile via cfg.solutions.augmentation.edge_feathering
+        if self.edge_feathering:
+            k_size = max(3, int(min(target_H, target_W) * 0.08))
+            if k_size % 2 == 0:
+                k_size += 1
+            feathered_mask = TF.gaussian_blur(
+                valid_outlier_mask.unsqueeze(0),
+                kernel_size=[k_size, k_size],
+                sigma=[max(1.0, k_size / 3.0), max(1.0, k_size / 3.0)]
+            ).squeeze(0)
+            alpha_mask = feathered_mask * self.alpha
+        else:
+            # Hard border: usa la maschera binaria diretta, nessun bordo sfumato
+            alpha_mask = valid_outlier_mask.float() * self.alpha
         
         # Blend (Pasting forte controllato da alpha sfocata per feathering)
         # Effettuiamo blending solo sui pixel interni (evitando dark halos)

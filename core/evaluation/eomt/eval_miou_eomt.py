@@ -69,7 +69,7 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, T
 import torch
 import time
 from argparse import ArgumentParser
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import Compose, Resize, ToTensor
 from PIL import Image
 from torchmetrics import JaccardIndex
@@ -134,6 +134,7 @@ def main():
     parser.add_argument('--device', default='cuda:0', help='Device to use for computation')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
     parser.add_argument('--save_logits', action='store_true', help='Save logits to disk')
+    parser.add_argument('--crop-batch-size', type=int, default=2, help='Batch size for crop window inference')
     args = parser.parse_args()
 
     model = load_eomt_model(args.ckpt_path)
@@ -176,6 +177,37 @@ def main():
     for k, v in cityscapes_mapping.items():
         mapping_256[k] = v
 
+    valid_paths = []
+    for img_path in image_paths:
+        gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
+                          .replace('leftImg8bit', 'gtFine') \
+                          .replace('.png', '_labelIds.png')
+        if os.path.exists(gt_path):
+            valid_paths.append((img_path, gt_path))
+        else:
+            logger.warning(f"ATTENZIONE: Manca la label per {img_path}\nCercata in: {gt_path}")
+
+    class CityscapesValDataset(Dataset):
+        def __init__(self, paths, mapping):
+            self.paths = paths
+            self.mapping = mapping
+
+        def __len__(self):
+            return len(self.paths)
+
+        def __getitem__(self, idx):
+            img_path, gt_path = self.paths[idx]
+            img_np = np.array(Image.open(img_path).convert('RGB'))
+            label_raw_np = np.array(Image.open(gt_path))
+            label_mapped_np = self.mapping[label_raw_np]
+            
+            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).float()
+            label_tensor = torch.from_numpy(label_mapped_np)
+            return img_tensor, label_tensor, img_path
+
+    dataset = CityscapesValDataset(valid_paths, mapping_256)
+    dataloader = DataLoader(dataset, batch_size=1, num_workers=args.num_workers, shuffle=False, pin_memory=True)
+
     with Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
@@ -184,33 +216,15 @@ def main():
         console=console,
         disable=args.quiet
     ) as progress:
-        task_id = progress.add_task("Evaluating images", total=len(image_paths))
+        task_id = progress.add_task("Evaluating images", total=len(dataset))
 
-        for img_path in image_paths:
-            # Ora cerchiamo il suffisso corretto che hai mostrato nel terminale: '_labelIds.png'
-            gt_path = img_path.replace('leftImg8bit_trainvaltest', 'gtFine_trainvaltest') \
-                              .replace('leftImg8bit', 'gtFine') \
-                              .replace('.png', '_labelIds.png')
-            
-            if not os.path.exists(gt_path):
-                logger.warning(f"ATTENZIONE: Manca la label per {img_path}\nCercata in: {gt_path}")
-                progress.advance(task_id)
-                continue
-
-            valid_images_count += 1
-
-            # Carica Immagine e Label Raw
-            img_np = np.array(Image.open(img_path).convert('RGB'))
-            label_raw_np = np.array(Image.open(gt_path))
-            
-            # Mappa i 34 ID raw ai 19 Train ID in modo istantaneo
-            label_mapped_np = mapping_256[label_raw_np]
-            
-            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).unsqueeze(0).float().to(device)
-            label_tensor = torch.from_numpy(label_mapped_np).unsqueeze(0).to(device)
+        for batch_idx, (img_tensor_batch, label_tensor_batch, img_path_batch) in enumerate(dataloader):
+            img_path = img_path_batch[0]
+            img_tensor = img_tensor_batch.to(device)
+            label_tensor = label_tensor_batch.to(device)
 
             with torch.no_grad():
-                dense_logits, _, _ = get_dense_logits(model, img_tensor)
+                dense_logits, _, _ = get_dense_logits(model, img_tensor, crop_batch_size=args.crop_batch_size)
                 preds = torch.argmax(dense_logits, dim=1)
                 metric.update(preds, label_tensor)
                 

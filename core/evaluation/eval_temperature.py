@@ -110,68 +110,69 @@ def main():
             logger.warning(f"Skipping {ds_name}: No logits found in {current_logits_path}")
             continue
 
-        best_metrics = {"auprc": -1, "fpr95": 100, "t": None}
-
-        for T in TEMPS:
-            all_scores, all_gts = [], []
-            
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeRemainingColumn(),
-                console=console
-            ) as progress:
-                task_id = progress.add_task(f"{ds_name} (T={T})", total=len(logit_files))
+        if ds_name != 'Cityscapes':
+            best_metrics = {"auprc": -1, "fpr95": 100, "t": None}
+    
+            for T in TEMPS:
+                all_scores, all_gts = [], []
                 
-                for l_path in logit_files:
-                    logits = torch.load(l_path, map_location=device).to(device)
-                    score = get_msp_score(logits, T, device)
+                with Progress(
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                    TimeRemainingColumn(),
+                    console=console
+                ) as progress:
+                    task_id = progress.add_task(f"{ds_name} (T={T})", total=len(logit_files))
                     
-                    # Mapping preciso della GT
-                    base_name = os.path.basename(l_path).replace(".pt", "")
-                    img_ref_list = glob.glob(ds_pattern.replace("*", base_name))
-                    if not img_ref_list: 
+                    for l_path in logit_files:
+                        logits = torch.load(l_path, map_location=device).to(device)
+                        score = get_msp_score(logits, T, device)
+                        
+                        # Mapping preciso della GT
+                        base_name = os.path.basename(l_path).replace(".pt", "")
+                        img_ref_list = glob.glob(ds_pattern.replace("*", base_name))
+                        if not img_ref_list: 
+                            progress.advance(task_id)
+                            continue
+                        
+                        gt_path = img_ref_list[0].replace("images", "labels_masks")
+                        if "RoadObsticle21" in gt_path: gt_path = gt_path.replace(".webp", ".png")
+                        if "fs_static" in gt_path: gt_path = gt_path.replace(".jpg", ".png")
+                        if "RoadAnomaly" in gt_path: gt_path = gt_path.replace(".jpg", ".png")
+    
+                        gt_img = Image.open(gt_path).resize((score.shape[1], score.shape[0]), Image.NEAREST)
+                        gt_np = np.array(gt_img)
+    
+                        # Mappature OOD
+                        if "RoadAnomaly" in ds_name: 
+                            gt_np = np.where(gt_np==2, 1, gt_np)
+                        elif "LostAndFound" in ds_name:
+                            gt_np = np.where(gt_np==0, 255, gt_np)
+                            gt_np = np.where(gt_np==1, 0, gt_np)
+                            gt_np = np.where((gt_np>1)&(gt_np<201), 1, gt_np)
+    
+                        mask = (gt_np != 255)
+                        if np.any(mask):
+                            all_scores.append(score[mask])
+                            all_gts.append(gt_np[mask])
+                        del logits # Free the large tensor
+                        
                         progress.advance(task_id)
-                        continue
-                    
-                    gt_path = img_ref_list[0].replace("images", "labels_masks")
-                    if "RoadObsticle21" in gt_path: gt_path = gt_path.replace(".webp", ".png")
-                    if "fs_static" in gt_path: gt_path = gt_path.replace(".jpg", ".png")
-                    if "RoadAnomaly" in gt_path: gt_path = gt_path.replace(".jpg", ".png")
-
-                    gt_img = Image.open(gt_path).resize((score.shape[1], score.shape[0]), Image.NEAREST)
-                    gt_np = np.array(gt_img)
-
-                    # Mappature OOD
-                    if "RoadAnomaly" in ds_name: 
-                        gt_np = np.where(gt_np==2, 1, gt_np)
-                    elif "LostAndFound" in ds_name:
-                        gt_np = np.where(gt_np==0, 255, gt_np)
-                        gt_np = np.where(gt_np==1, 0, gt_np)
-                        gt_np = np.where((gt_np>1)&(gt_np<201), 1, gt_np)
-
-                    mask = (gt_np != 255)
-                    if np.any(mask):
-                        all_scores.append(score[mask])
-                        all_gts.append(gt_np[mask])
-                    del logits # Free the large tensor
-                    
-                    progress.advance(task_id)
-
-            if not all_gts: continue
-            
-            y_true = np.concatenate(all_gts)
-            y_scores = np.concatenate(all_scores)
-            
-            auprc = average_precision_score(y_true, y_scores) * 100
-            fpr95 = fpr_at_95_tpr(y_scores, y_true) * 100
-            
-            logger.info(f" {ds_name} | T={T} -> AuPRC: {auprc:.2f}, FPR95: {fpr95:.2f}")
-            update_table_t_entry(args.model, f"MSP (t = {T})", ds_name, f"{auprc:.2f}", f"{fpr95:.2f}")
-            
-            if auprc > best_metrics["auprc"]:
-                best_metrics.update({"auprc": auprc, "fpr95": fpr95, "t": T})
+    
+                if not all_gts: continue
+                
+                y_true = np.concatenate(all_gts)
+                y_scores = np.concatenate(all_scores)
+                
+                auprc = average_precision_score(y_true, y_scores) * 100
+                fpr95 = fpr_at_95_tpr(y_scores, y_true) * 100
+                
+                logger.info(f" {ds_name} | T={T} -> AuPRC: {auprc:.2f}, FPR95: {fpr95:.2f}")
+                update_table_t_entry(args.model, f"MSP (t = {T})", ds_name, f"{auprc:.2f}", f"{fpr95:.2f}")
+                
+                if auprc > best_metrics["auprc"]:
+                    best_metrics.update({"auprc": auprc, "fpr95": fpr95, "t": T})
         
         # If this was Cityscapes, we can calculate mIoU (it's independent of T)
         if ds_name == 'Cityscapes' and logit_files:
@@ -210,12 +211,12 @@ def main():
                 label_tensor = torch.from_numpy(label_mapped_np).to(device)
                 
                 # Resize preds to match label if needed (ERFNet uses 512, EoMT 1024)
-                if preds.shape != label_tensor.shape:
-                    preds_reshaped = F.interpolate(preds.unsqueeze(0).unsqueeze(0).float(), 
-                                                 size=label_tensor.shape, 
+                if preds.shape[-2:] != label_tensor.shape[-2:]:
+                    preds_reshaped = F.interpolate(preds.unsqueeze(1).float(), 
+                                                 size=label_tensor.shape[-2:], 
                                                  mode='nearest').squeeze().long()
                 else:
-                    preds_reshaped = preds
+                    preds_reshaped = preds.squeeze()
                     
                 metric.update(preds_reshaped, label_tensor)
                 del logits, preds
