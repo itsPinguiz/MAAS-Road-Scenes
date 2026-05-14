@@ -107,23 +107,32 @@ def load_eomt_model(ckpt_path):
         attn_mask_annealing_enabled=True,
     ).eval()
 
-    # Caricamento dei pesi
+    # Caricamento dei pesi — supporta sia .ckpt (Lightning) che .pth (fine-tuned plain state_dict)
     try:
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        state_dict = ckpt.get("state_dict", ckpt)
-        
-        # Pulizia delle chiavi di PyTorch Lightning se necessario (rimuove "network." se il modello base è già network)
-        # Ma nel nostro caso, MaskClassificationSemantic ha un attributo self.network, quindi le chiavi dovrebbero combaciare!
-        
-        # Mettiamo strict=True. Se fallisce ora, significa che abbiamo ancora un mismatch, ma con questi parametri non dovrebbe!
-        model.load_state_dict(state_dict, strict=True)
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except Exception as e:
-        logger.error(f"Error loading weights: {e}")
-        # Fallback senza strict nel caso ci siano chiavi extra non importanti, ma avvisiamo l'utente
-        logger.warning("Attempting fallback with strict=False...")
+        logger.error(f"Impossibile aprire il checkpoint '{ckpt_path}': {e}")
+        raise
+
+    # .ckpt Lightning wraps weights under "state_dict" with a "model." prefix.
+    # .pth fine-tuned checkpoints saved by train.py are plain state_dicts.
+    if isinstance(ckpt, dict) and "state_dict" in ckpt:
+        raw = ckpt["state_dict"]
+        state_dict = {k.replace("model.", "", 1): v for k, v in raw.items()}
+        strict = True
+    else:
+        state_dict = ckpt  # already a plain state_dict
+        strict = True
+
+    try:
+        model.load_state_dict(state_dict, strict=strict)
+        logger.success(f"Pesi caricati con successo (strict={strict}): {ckpt_path}")
+    except RuntimeError as e:
+        logger.warning(f"strict=True fallito: {e}\nRitento con strict=False...")
         model.load_state_dict(state_dict, strict=False)
 
     return model
+
 
 def get_dense_logits(model, img_tensor, crop_batch_size=2):
     """
@@ -190,7 +199,8 @@ class AnomalyDataset(Dataset):
         img_pil = Image.open(path).convert('RGB')
         w, h = img_pil.size
         img_np_temp = np.array(img_pil)
-        img_tensor = torch.from_numpy(img_np_temp).permute(2, 0, 1).float() / 255.0
+        # Keep inputs in [0, 255]; LightningModule.forward scales by 1/255.
+        img_tensor = torch.from_numpy(img_np_temp).permute(2, 0, 1).float()
         return img_tensor, path, w, h
 
 def main():

@@ -1,0 +1,29 @@
+Model: EoMT | Dataset: road_obstacle21
+------------------------------
+Size: Small
+  msp       : 23.72%
+  maxlogit  : 23.97%
+  maxentropy: 11.41%
+Size: Medium
+  msp       : 71.74%
+  maxlogit  : 71.95%
+  maxentropy: 60.97%
+Size: Large
+  msp       : 69.70%
+  maxlogit  : 69.95%
+  maxentropy: 65.71%
+
+Class Prediction on OOD Pixels:
+  road           : 40.4%
+  sidewalk       : 2.4%
+  building       : 3.6%
+  wall           : 1.4%
+  fence          : 36.1%
+  vegetation     : 0.0%
+  terrain        : 0.6%
+  sky            : 3.0%
+  person         : 2.4%
+  rider          : 2.7%
+  car            : 5.0%
+  motorcycle     : 2.4%
+  bicycle        : 0.0%

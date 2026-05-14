@@ -1,0 +1,30 @@
+Model: EoMT | Dataset: lost_found
+------------------------------
+Size: Small
+  msp       : 2.33%
+  maxlogit  : 2.31%
+  maxentropy: 2.50%
+Size: Medium
+  msp       : 12.02%
+  maxlogit  : 11.95%
+  maxentropy: 13.65%
+Size: Large
+  msp       : 22.37%
+  maxlogit  : 22.27%
+  maxentropy: 23.55%
+
+Class Prediction on OOD Pixels:
+  road           : 33.1%
+  sidewalk       : 10.2%
+  building       : 3.8%
+  wall           : 7.7%
+  fence          : 22.7%
+  pole           : 0.2%
+  traffic sign   : 0.9%
+  vegetation     : 0.1%
+  terrain        : 2.2%
+  sky            : 5.4%
+  person         : 4.1%
+  car            : 7.0%
+  truck          : 0.7%
+  bicycle        : 2.0%

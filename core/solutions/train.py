@@ -3,6 +3,7 @@ import sys
 import yaml
 import importlib
 import gc
+from datetime import datetime
 
 # FIX OOM: riduce la frammentazione della memoria CUDA su run lunghe
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
@@ -113,7 +114,9 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
         # ========================================================
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
             import torch.nn.functional as F
-            mask_logits_list, class_logits_list = model(aug_images)
+            # LightningModule.forward divides by 255.0; keep model inputs in [0, 255]
+            aug_images_for_model = aug_images * 255.0
+            mask_logits_list, class_logits_list = model(aug_images_for_model)
             
             final_mask_logits = mask_logits_list[-1].float()
             final_class_logits = class_logits_list[-1].float()
@@ -173,9 +176,24 @@ def run_finetuning():
     logger.info(f"Device attivo: [bold cyan]{device}[/bold cyan]", extra={"markup": True})
     
     # --- Checkpoint directory (save & resume) — from config ---
-    ckpt_dir = os.path.join(cfg.paths.root, cfg.solutions.training.checkpoint_dir)
+    ckpt_base_dir = os.path.join(cfg.paths.root, cfg.solutions.training.checkpoint_dir)
+
+    # resume_from: path to a specific run folder (relative to project root or absolute).
+    # When set, training resumes from the latest checkpoint inside that folder and
+    # continues saving new epochs there. When null/empty, a new timestamped folder is created.
+    resume_from = getattr(cfg.solutions.training, 'resume_from', None) or ''
+    if resume_from:
+        # Support both absolute paths and paths relative to project root
+        if not os.path.isabs(resume_from):
+            resume_from = os.path.join(cfg.paths.root, resume_from)
+        ckpt_dir = resume_from
+        logger.info(f"[resume_from] Ripresa da run esistente: {ckpt_dir}")
+    else:
+        run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ckpt_dir = os.path.join(ckpt_base_dir, run_timestamp)
+        logger.info(f"Nuova run — checkpoint dir: {ckpt_dir}")
+
     os.makedirs(ckpt_dir, exist_ok=True)
-    logger.info(f"Checkpoint dir: {ckpt_dir}")
     
     # --- Base pretrained weights (from config) ---
     base_ckpt_path = os.path.join(cfg.paths.root, cfg.paths.models.eomt_checkpoint)
@@ -191,10 +209,14 @@ def run_finetuning():
         ignore_index=19
     ).to(device)
     
-    # Optimizer hardcodato conservativo per ViT e compatibile con parametri frizzati
-    optimizer = optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=5e-6, weight_decay=1e-4)
+    # Optimizer compatibile con parametri frizzati (lr da config)
+    optimizer = optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=cfg.solutions.training.lr,
+        weight_decay=1e-4
+    )
     
-    from torchvision.transforms import Compose, ToTensor, Normalize
+    from torchvision.transforms import Compose, ToTensor
     import glob
     from PIL import Image
     import numpy as np
@@ -268,14 +290,17 @@ def run_finetuning():
     base_dataset = LocalCityscapesDataset(
         root_dir=cityscapes_root,
         transform=Compose([
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ToTensor()
         ]),
         target_transform=Compose([PILToLongTensorWrap()]),
         subset='train'
     )
     
-    outliers_dir = os.path.join(cfg.paths.root, "Datasets/COCO/Outliers_COCO")
+    outliers_dir = os.path.join(cfg.paths.root, "Datasets", "Outliers_COCO")
+    if not os.path.isdir(outliers_dir):
+        outliers_dir = os.path.join(cfg.paths.root, "Datasets", "COCO", "Outliers_COCO")
+    if (not os.path.isdir(outliers_dir)) or (len(glob.glob(os.path.join(outliers_dir, "*.png"))) == 0):
+        logger.warning(f"Outlier directory missing or empty: {outliers_dir}. OOD loss may stay near zero.")
     
     dataset = OutlierAugmentedDataset(
         base_dataset=base_dataset,
@@ -291,12 +316,12 @@ def run_finetuning():
         persistent_workers=True,   # FIX: evita corruzione shared-memory tra worker e main process
     )
     
-    # --- Resume or fresh train — controlled by cfg.solutions.training.resume ---
+    # --- Resume or fresh train ---
+    # Priority: resume_from (specific run folder) > fresh start
     import glob as _glob
-    do_resume = getattr(cfg.solutions.training, 'resume', False)
     start_epoch = 1
 
-    if do_resume:
+    if resume_from:
         existing_ckpts = sorted(
             _glob.glob(os.path.join(ckpt_dir, "epoch_*_EoMT.pth")),
             key=lambda p: int(os.path.basename(p).split('_')[1])
@@ -304,14 +329,14 @@ def run_finetuning():
         if existing_ckpts:
             latest_ckpt = existing_ckpts[-1]
             start_epoch = int(os.path.basename(latest_ckpt).split('_')[1]) + 1
-            logger.info(f"[resume=true] Caricamento checkpoint: {latest_ckpt} (prossima epoch: {start_epoch})")
+            logger.info(f"[resume_from] Caricamento checkpoint: {latest_ckpt} (prossima epoch: {start_epoch})")
             resume_sd = torch.load(latest_ckpt, map_location=device)
             model.load_state_dict(resume_sd, strict=True)
             logger.success(f"Checkpoint caricato — ripresa da epoch {start_epoch}")
         else:
-            logger.warning(f"[resume=true] Nessun checkpoint trovato in {ckpt_dir} — training da zero.")
+            logger.warning(f"[resume_from] Nessun checkpoint trovato in {ckpt_dir} — training da zero.")
     else:
-        logger.info("[resume=false] Training da zero (nessun checkpoint caricato).")
+        logger.info("Training da zero (nuova run).")
 
     epochs = cfg.solutions.training.epochs
     for epoch in range(start_epoch, epochs + 1):

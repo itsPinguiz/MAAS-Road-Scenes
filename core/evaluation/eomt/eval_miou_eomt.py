@@ -109,17 +109,32 @@ def load_eomt_model(ckpt_path):
         attn_mask_annealing_enabled=True,
     ).eval()
 
-    # Caricamento dei pesi
+    # Caricamento dei pesi — supporta sia .ckpt (Lightning) che .pth (fine-tuned plain state_dict)
     try:
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        state_dict = ckpt.get("state_dict", ckpt)
-        model.load_state_dict(state_dict, strict=True)
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except Exception as e:
-        logger.error(f"Error loading weights: {e}")
-        logger.warning("Attempting fallback with strict=False...")
+        logger.error(f"Impossibile aprire il checkpoint '{ckpt_path}': {e}")
+        raise
+
+    # .ckpt Lightning wraps weights under "state_dict" with a "model." prefix.
+    # .pth fine-tuned checkpoints saved by train.py are plain state_dicts.
+    if isinstance(ckpt, dict) and "state_dict" in ckpt:
+        raw = ckpt["state_dict"]
+        state_dict = {k.replace("model.", "", 1): v for k, v in raw.items()}
+        strict = True
+    else:
+        state_dict = ckpt  # already a plain state_dict
+        strict = True
+
+    try:
+        model.load_state_dict(state_dict, strict=strict)
+        logger.success(f"Pesi caricati con successo (strict={strict}): {ckpt_path}")
+    except RuntimeError as e:
+        logger.warning(f"strict=True fallito: {e}\nRitento con strict=False...")
         model.load_state_dict(state_dict, strict=False)
 
     return model
+
 
 # 19 cityscapes classes + 1 ignored class mapped to 19
 NUM_CLASSES = 20
@@ -201,6 +216,7 @@ def main():
             label_raw_np = np.array(Image.open(gt_path))
             label_mapped_np = self.mapping[label_raw_np]
             
+            # Keep inputs in [0, 255]; LightningModule.forward scales by 1/255.
             img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).float()
             label_tensor = torch.from_numpy(label_mapped_np)
             return img_tensor, label_tensor, img_path

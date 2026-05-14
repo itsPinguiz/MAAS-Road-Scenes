@@ -178,10 +178,7 @@ class PerspectiveOutlierPasting:
         jitter = T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05)
         valid_outlier_img = jitter(valid_outlier_img)
         
-        # FIX: Normalize outlier to match base Cityscapes ImageNet normalization
-        mean = torch.tensor([0.485, 0.456, 0.406], device=valid_outlier_img.device).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=valid_outlier_img.device).view(3, 1, 1)
-        valid_outlier_img = (valid_outlier_img - mean) / std
+        # Note: keep outliers in [0, 1] range; EoMT applies normalization internally.
         
         # 2. Gaussian Noise su patch rimosso: applicheremo noise globale alla fine
         
