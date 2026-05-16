@@ -36,7 +36,8 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
     encoder = ViT(
         img_size=img_size, 
         patch_size=16, 
-        backbone_name="vit_base_patch14_reg4_dinov2"
+        backbone_name="vit_base_patch14_reg4_dinov2",
+        ckpt_path=checkpoint_path,
     )
 
     network = EoMT(

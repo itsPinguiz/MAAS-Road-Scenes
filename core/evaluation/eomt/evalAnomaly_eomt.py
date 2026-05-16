@@ -54,7 +54,8 @@ def load_eomt_model(ckpt_path):
     encoder = ViT(
         img_size=img_size, 
         patch_size=16, 
-        backbone_name="vit_base_patch14_reg4_dinov2"
+        backbone_name="vit_base_patch14_reg4_dinov2",
+        ckpt_path=ckpt_path,
     )
 
     network = EoMT(

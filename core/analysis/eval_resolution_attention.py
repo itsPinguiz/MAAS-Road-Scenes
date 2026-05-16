@@ -86,7 +86,7 @@ def load_eomt(ckpt_path):
         ckpt_path = os.path.join(cfg.paths.root, ckpt_path)
     img_size = (1024, 1024)
     num_classes = 19
-    encoder = ViT(img_size=img_size, patch_size=16, backbone_name="vit_base_patch14_reg4_dinov2")
+    encoder = ViT(img_size=img_size, patch_size=16, backbone_name="vit_base_patch14_reg4_dinov2", ckpt_path=ckpt_path)
     network = EoMT(num_q=cfg.analysis.num_queries, encoder=encoder, num_blocks=3, masked_attn_enabled=True, num_classes=num_classes)
     model = MaskClassificationSemantic(img_size=img_size, num_classes=num_classes, network=network, attn_mask_annealing_enabled=True).eval()
     try:
