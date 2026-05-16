@@ -96,25 +96,24 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
         optimizer.zero_grad(set_to_none=True)
         
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=is_cuda):
-            # LightningModule.forward divides by 255.0; keep model inputs in [0, 255]
             aug_images_for_model = aug_images * 255.0
             mask_logits_list, class_logits_list = model(aug_images_for_model)
             
-            final_mask_logits = mask_logits_list[-1].float()
-            final_class_logits = class_logits_list[-1].float()
+            final_mask_logits = mask_logits_list[-1]
+            final_class_logits = class_logits_list[-1]
+
+            dense_logits_low_res = model.to_per_pixel_logits_semantic(
+                final_mask_logits, final_class_logits
+            )
             
-            final_mask_logits = F.interpolate(
-                final_mask_logits, 
+            dense_logits = F.interpolate(
+                dense_logits_low_res.float(), 
                 size=(aug_images.shape[2], aug_images.shape[3]), 
                 mode="bilinear", 
                 align_corners=False
             )
-
-            dense_logits = model.to_per_pixel_logits_semantic(
-                final_mask_logits, final_class_logits
-            )
             
-            losses = loss_fn(dense_logits.float(), aug_masks, ood_masks)
+            losses = loss_fn(dense_logits, aug_masks, ood_masks)
             
             loss_ce = losses["loss_ce"]
             loss_ood = losses["loss_ood"]
