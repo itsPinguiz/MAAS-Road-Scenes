@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--python", default=sys.executable, help="Python executable with EoMT dependencies")
     parser.add_argument("--device", default="cuda", help="Device passed to eval scripts")
     parser.add_argument("--datasets", nargs="+", default=list(DATASETS), choices=list(DATASETS))
-    parser.add_argument("--methods", nargs="+", default=["msp", "maxlogit", "maxentropy"], choices=list(METHODS))
+    parser.add_argument("--methods", nargs="+", default=list(METHODS), choices=list(METHODS))
     parser.add_argument("--skip-miou", action="store_true", help="Only rank OOD metrics")
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--crop-batch-size", type=int, default=2)
@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--miou-baseline", type=float, default=None, help="Reference mIoU for penalty, e.g. original model mIoU")
     parser.add_argument("--miou-penalty", type=float, default=2.0, help="Penalty multiplier for mIoU drop below baseline")
     parser.add_argument("--fpr-weight", type=float, default=0.25, help="Penalty multiplier for mean FPR95")
-    parser.add_argument("--output-dir", default=None, help="Defaults to <run_dir>/selection")
+    parser.add_argument("--output-dir", default=None, help="Defaults to results/checkpoint_selection/<run_dir_name>")
     return parser.parse_args()
 
 
@@ -219,7 +219,7 @@ def main() -> None:
         run_dir = Path(cfg.paths.root) / run_dir
     args.run_dir = str(run_dir)
 
-    output_dir = Path(args.output_dir) if args.output_dir else run_dir / "selection"
+    output_dir = Path(args.output_dir) if args.output_dir else Path(cfg.paths.root) / "results" / "checkpoint_selection" / run_dir.name
     checkpoints = find_checkpoints(run_dir, args.max_epochs)
     logger.info(f"Evaluating {len(checkpoints)} checkpoints from {run_dir}")
 
