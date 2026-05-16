@@ -115,6 +115,7 @@ def main():
     parser.add_argument('--ckpt_path', default=cfg.paths.models.eomt_checkpoint)
     parser.add_argument('--device', default=str(DEVICE), help='Device to use for computation')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
+    parser.add_argument('--no-update-table', action='store_true', help='Do not write mIoU into TABLE.md')
     parser.add_argument('--save_logits', action='store_true', help='Save logits to disk')
     parser.add_argument('--crop-batch-size', type=int, default=2, help='Batch size for crop window inference')
     args = parser.parse_args()
@@ -226,13 +227,14 @@ def main():
         logger.info(f"[bold cyan]mIoU:[/bold cyan]    {miou_val:.2f}%")
         logger.info(f"=======================================\n")
 
-    from core.utility.update_table import update_table_entry
-    
-    miou_str = f"{mIoU * 100:.2f}"
-    for method in ['MSP', 'MaxLogit', 'Max Entropy', 'RbA']:
-        update_table_entry(model="EoMT", method=method, miou=miou_str)
-    
-    logger.success("Updated TABLE.md with EoMT mIoU.")
+    if not args.no_update_table:
+        from core.utility.update_table import update_table_entry
+        
+        miou_str = f"{mIoU * 100:.2f}"
+        for method in ['MSP', 'MaxLogit', 'Max Entropy', 'RbA']:
+            update_table_entry(model="EoMT", method=method, miou=miou_str)
+        
+        logger.success("Updated TABLE.md with EoMT mIoU.")
 
 if __name__ == '__main__':
     main()

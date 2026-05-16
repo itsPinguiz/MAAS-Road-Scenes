@@ -174,6 +174,7 @@ def main():
     parser.add_argument('--dataset_name', default='default_dataset', help='Name of the dataset for organizing saved logits folder')
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', help='Device to use for computation (e.g., "cpu", "cuda:0")')
     parser.add_argument('--quiet', action='store_true', help='Minimal output for bulk runs')
+    parser.add_argument('--no-update-table', action='store_true', help='Do not write metrics into TABLE.md')
     parser.add_argument('--num-workers', type=int, default=4, help='Number of background workers for DataLoader')
     parser.add_argument('--crop-batch-size', type=int, default=2, help='Batch size for crop window inference')
     args = parser.parse_args()
@@ -304,8 +305,9 @@ def main():
             logger.info(f"FPR95:   {fpr*100.0:.2f}")
             logger.info("---------------------------------------")
         
-        from core.utility.update_table import update_table_entry
-        update_table_entry(model="EoMT", method=method_label, dataset=args.dataset_name, miou='-', auprc=f"{prc_auc*100.0:.2f}", fpr95=f"{fpr*100.0:.2f}")
+        if not args.no_update_table:
+            from core.utility.update_table import update_table_entry
+            update_table_entry(model="EoMT", method=method_label, dataset=args.dataset_name, miou='-', auprc=f"{prc_auc*100.0:.2f}", fpr95=f"{fpr*100.0:.2f}")
         
     if not args.quiet:
         logger.info("=======================================\n")
