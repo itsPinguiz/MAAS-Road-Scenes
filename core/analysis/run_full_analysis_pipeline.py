@@ -19,8 +19,6 @@ import time
 import subprocess
 from pathlib import Path
 from rich.panel import Panel
-from rich.table import Table
-from rich import box
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
@@ -106,9 +104,9 @@ def run_command(cmd, task_name, env=None):
 
 
 def main():
+    """Run all fine-grained analysis scripts across configured models and datasets."""
     root_dir = Path(_ROOT)
     
-    # Fallback sicuro nel caso in cui cfg.analysis.reports_dir non sia ancora nel config.yml
     reports_dir_path = getattr(getattr(cfg, "analysis", None), "reports_dir", "results/analysis_reports")
     reports_dir = root_dir / reports_dir_path
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -124,7 +122,7 @@ def main():
 
     sys_env = os.environ.copy()
     
-    # FORZATURA: Usa SEMPRE l'interprete Python corrente (quello che ha cv2 e seaborn)
+    # Use the active interpreter so analysis dependencies match the current environment.
     python_exec = sys.executable
 
     for model_name, model_info in MODELS.items():

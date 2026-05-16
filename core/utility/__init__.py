@@ -1,1 +1,1 @@
-# Enable package imports for utility layer
+"""Shared utilities for config, logging, runtime setup, and result tables."""

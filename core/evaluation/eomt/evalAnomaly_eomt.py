@@ -1,34 +1,22 @@
 import os
 import sys
 
-# Add project root to path so core.* is importable
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(_SCRIPT_DIR)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-# Add third_party/eomt to path for models and training
 _TP_EOMT = os.path.join(_ROOT, "third_party", "eomt")
 if _TP_EOMT not in sys.path:
     sys.path.append(_TP_EOMT)
 
 from core.utility.config_loader import cfg
-
-# Unified Device Logic
 import torch
-def get_device():
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        return torch.device('mps')
-    else:
-        return torch.device('cpu')
+from core.utility.runtime import get_device
 
 DEVICE = get_device()
 
-import os
 import glob
-import torch
 import random
 from PIL import Image
 import numpy as np
@@ -43,9 +31,9 @@ import warnings
 warnings.filterwarnings("ignore", ".*'network' is an instance.*")
 
 from core.utility.logger import logger, console
+from core.utility.eval_common import anomaly_scores_numpy
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 
-from training.lightning_module import LightningModule
 from models.vit import ViT
 from models.eomt import EoMT
 from training.mask_classification_semantic import MaskClassificationSemantic
@@ -58,31 +46,8 @@ torch.manual_seed(seed)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
 
-def compute_msp_anomaly_score(logits):
-    probs = F.softmax(logits, dim=1)
-    msp, _ = torch.max(probs, dim=1)
-    return 1.0 - msp 
-
-def compute_maxlogit_anomaly_score(logits):
-    max_logit, _ = torch.max(logits, dim=1)
-    return -max_logit
-
-def compute_maxentropy_anomaly_score(logits):
-    probs = F.softmax(logits, dim=1)
-    entropy = -torch.sum(probs * torch.log(probs + 1e-12), dim=1)
-    return entropy
-    
-def compute_rba_anomaly_score(logits):
-    # logits shape: (B, C, H, W)
-    return -torch.sum(torch.tanh(logits), dim=1)
-
-import yaml
-import importlib
-from huggingface_hub import hf_hub_download
-
 def load_eomt_model(ckpt_path):
-    
-    # Parametri esatti estratti dal file .ckpt
+    """Build the EoMT architecture and load a Lightning or plain state dict."""
     img_size = (1024, 1024)
     num_classes = 19
     
@@ -107,11 +72,10 @@ def load_eomt_model(ckpt_path):
         attn_mask_annealing_enabled=True,
     ).eval()
 
-    # Caricamento dei pesi — supporta sia .ckpt (Lightning) che .pth (fine-tuned plain state_dict)
     try:
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except Exception as e:
-        logger.error(f"Impossibile aprire il checkpoint '{ckpt_path}': {e}")
+        logger.error(f"Could not open checkpoint '{ckpt_path}': {e}")
         raise
 
     # .ckpt Lightning wraps weights under "state_dict" with a "model." prefix.
@@ -126,19 +90,16 @@ def load_eomt_model(ckpt_path):
 
     try:
         model.load_state_dict(state_dict, strict=strict)
-        logger.success(f"Pesi caricati con successo (strict={strict}): {ckpt_path}")
+        logger.success(f"Weights loaded successfully (strict={strict}): {ckpt_path}")
     except RuntimeError as e:
-        logger.warning(f"strict=True fallito: {e}\nRitento con strict=False...")
+        logger.warning(f"strict=True failed: {e}\nRetrying with strict=False...")
         model.load_state_dict(state_dict, strict=False)
 
     return model
 
 
 def get_dense_logits(model, img_tensor, crop_batch_size=2):
-    """
-    Versione ottimizzata con Crop Batching e Automatic Mixed Precision.
-    """
-    # 1. Taglia l'immagine grande in crop
+    """Run windowed EoMT inference and stitch dense logits back together."""
     crops, origins = model.window_imgs_semantic(img_tensor)
     
     final_mask_logits_list = []
@@ -149,37 +110,30 @@ def get_dense_logits(model, img_tensor, crop_batch_size=2):
         
     num_crops = crops.shape[0]
     
-    # 2. Usa AMP (Mixed Precision) per dimezzare l'uso della VRAM
-    with torch.autocast(device_type='cuda', dtype=torch.float16):
+    is_cuda = img_tensor.device.type == "cuda"
+    with torch.autocast(device_type=img_tensor.device.type, dtype=torch.float16, enabled=is_cuda):
         
-        # Gestisce i crop in batch
         for i in range(0, num_crops, crop_batch_size):
             crop_batch = crops[i:i+crop_batch_size]
             
-            # Forward pass per questo specifico batch di crop
             mask_logits_per_layer, class_logits_per_layer = model(crop_batch)
             
-            # Salviamo solo l'ultimo layer e forziamo a float32 per evitare problemi matematici dopo
             final_mask_logits_list.append(mask_logits_per_layer[-1].float())
             final_class_logits_list.append(class_logits_per_layer[-1].float())
             
-            # Puliamo la memoria subito dopo il forward pass
             del mask_logits_per_layer, class_logits_per_layer
-            torch.cuda.empty_cache()
+            if is_cuda:
+                torch.cuda.empty_cache()
             
-    # Uniamo i risultati calcolati singolarmente
     final_mask_logits = torch.cat(final_mask_logits_list, dim=0)
     final_class_logits = torch.cat(final_class_logits_list, dim=0)
     
-    # Interpolazione alla dimensione nativa del crop (1024x1024)
     final_mask_logits = F.interpolate(final_mask_logits, model.img_size, mode="bilinear")
     
-    # 3. Ricostruisce i logit densi per pixel (H, W) per ogni crop
     crop_logits = model.to_per_pixel_logits_semantic(
         final_mask_logits, final_class_logits
     )
     
-    # 4. Ricuce assieme i crop per formare l'immagine ad alta risoluzione originale
     img_sizes = [img.shape[-2:] for img in img_tensor]
     dense_logits = model.revert_window_logits_semantic(crop_logits, origins, img_sizes)
     
@@ -188,6 +142,8 @@ def get_dense_logits(model, img_tensor, crop_batch_size=2):
 from torch.utils.data import Dataset, DataLoader
 
 class AnomalyDataset(Dataset):
+    """Lazily load images as EoMT-ready tensors and keep source metadata."""
+
     def __init__(self, paths):
         self.paths = paths
 
@@ -204,6 +160,7 @@ class AnomalyDataset(Dataset):
         return img_tensor, path, w, h
 
 def main():
+    """Evaluate EoMT anomaly metrics for one dataset glob."""
     parser = ArgumentParser()
     parser.add_argument(
         "--input",
@@ -220,7 +177,6 @@ def main():
     parser.add_argument('--crop-batch-size', type=int, default=2, help='Batch size for crop window inference')
     args = parser.parse_args()
 
-    # Dictionary to store anomaly scores for each method
     anomaly_scores_all = { 'msp': [], 'maxlogit': [], 'maxentropy': [], 'rba': [] }
     ood_gts_list = []
 
@@ -258,12 +214,9 @@ def main():
             save_dir = osp.join("saved_logits", "eomt", ckpt_name, args.dataset_name.replace(" ", "_"))
             save_path = osp.join(save_dir, f"{base_name}.pt")
 
-            # --- LOGICA IBRIDA: CARICAMENTO O INFERENZA ---
             if osp.exists(save_path):
-                # Caricamento istantaneo (funziona su CPU/GPU)
                 dense_logits = torch.load(save_path, map_location=device)
             else:
-                # Esecuzione inferenza (Richiede GPU)
                 with torch.no_grad():
                     dense_logits, _, _ = get_dense_logits(model, img_tensor, crop_batch_size=args.crop_batch_size)
                     
@@ -271,13 +224,8 @@ def main():
                         os.makedirs(save_dir, exist_ok=True)
                         torch.save(dense_logits.cpu(), save_path)
     
-            # Calcolo simultaneo dei 4 punteggi
-            anomaly_result_msp = compute_msp_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_maxlogit = compute_maxlogit_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_maxentropy = compute_maxentropy_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
-            anomaly_result_rba = compute_rba_anomaly_score(dense_logits).squeeze(0).data.cpu().numpy()
+            score_maps = anomaly_scores_numpy(dense_logits, include_rba=True)
     
-            # --- GESTIONE GROUND TRUTH ---
             pathGT = path.replace("images", "labels_masks")                
             if "RoadObsticle21" in pathGT: pathGT = pathGT.replace("webp", "png")
             if "fs_static" in pathGT: pathGT = pathGT.replace("jpg", "png")                
@@ -285,7 +233,6 @@ def main():
     
             try:
                 mask_img = Image.open(pathGT)
-                # Usiamo le dimensioni w, h ottenute sopra
                 mask_img = mask_img.resize((w, h), Image.NEAREST)
                 ood_gts = np.array(mask_img)
             except Exception as e:
@@ -293,7 +240,6 @@ def main():
                 progress.advance(task_id)
                 continue
     
-            # Mappature classi (RoadAnomaly, LostAndFound, etc.)
             if "RoadAnomaly" in pathGT:
                 ood_gts = np.where((ood_gts==2), 1, ood_gts)
             if "LostAndFound" in pathGT:
@@ -307,13 +253,10 @@ def main():
     
             if 1 in np.unique(ood_gts):
                 ood_gts_list.append(ood_gts)
-                anomaly_scores_all['msp'].append(anomaly_result_msp)
-                anomaly_scores_all['maxlogit'].append(anomaly_result_maxlogit)
-                anomaly_scores_all['maxentropy'].append(anomaly_result_maxentropy)
-                anomaly_scores_all['rba'].append(anomaly_result_rba)
+                for method, score in score_maps.items():
+                    anomaly_scores_all[method].append(score)
                 
-            # Pulizia memoria
-            del dense_logits, anomaly_result_msp, anomaly_result_maxlogit, anomaly_result_maxentropy, anomaly_result_rba, ood_gts, mask_img
+            del dense_logits, score_maps, ood_gts, mask_img
             if img_tensor is not None: del img_tensor
             torch.cuda.empty_cache()
             progress.advance(task_id)
@@ -322,7 +265,6 @@ def main():
         logger.warning("No valid evaluations found.")
         return
     
-    # Flatten lists for metrics
     ood_gts = np.concatenate([gt.flatten() for gt in ood_gts_list])
     ood_mask = (ood_gts == 1)
     ind_mask = (ood_gts == 0)
@@ -333,12 +275,9 @@ def main():
         logger.info(f"Dataset: {args.dataset_name}")
         logger.info("---------------------------------------")
     
-    # Evaluate for each method
     for method in ['msp', 'maxlogit', 'maxentropy', 'rba']:
         anomaly_scores = np.concatenate([score.flatten() for score in anomaly_scores_all[method]])
 
-        # We only care about positive (1) and negative (0) OOD classes. 
-        # Ignore index is 255 etc.
         ood_out = anomaly_scores[ood_mask]
         ind_out = anomaly_scores[ind_mask]
 
@@ -354,20 +293,21 @@ def main():
         method_label = method.upper() if method != 'maxentropy' else 'MAX ENTROPY'
         
         if args.quiet:
-            logger.info(f"[Metrics] Model: EoMT, Dataset: {args.dataset_name}, Method: {method_label}, AuPRC: {prc_auc*100.0:.2f}, FPR95: {fpr*100.0:.2f}")
+            logger.info(
+                f"[Metrics] Model: EoMT, Dataset: {args.dataset_name}, Method: {method_label}, "
+                f"AuPRC: {prc_auc*100.0:.2f}, FPR95: {fpr*100.0:.2f}"
+            )
         else:
             logger.info(f"Method:  {method_label}")
             logger.info(f"AuPRC:   {prc_auc*100.0:.2f}")
             logger.info(f"FPR95:   {fpr*100.0:.2f}")
             logger.info("---------------------------------------")
         
-        # Update TABLE.md directly
         from core.utility.update_table import update_table_entry
         update_table_entry(model="EoMT", method=method_label, dataset=args.dataset_name, miou='-', auprc=f"{prc_auc*100.0:.2f}", fpr95=f"{fpr*100.0:.2f}")
         
     if not args.quiet:
         logger.info("=======================================\n")
-    file.close()
 
 if __name__ == '__main__':
     main()

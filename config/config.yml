@@ -1,0 +1,110 @@
+# =============================================================================
+# MAAS-Road-Scenes Pipeline Configuration
+# All paths are relative to the project root (the directory of this file).
+# =============================================================================
+# =============================================================================
+# Pipeline Execution Flags
+# =============================================================================
+pipeline:
+  run_erfnet: false
+  run_eomt: true
+
+paths:
+  # Override root for Google Colab (ignored when running locally)
+  colab_root: "/content/drive/MyDrive/Project"
+
+  datasets:
+    cityscapes:             "Datasets/Cityscapes"
+    fishyscapes_static:     "Datasets/Fishyscapes/fs_static/images/*.jpg"
+    fishyscapes_lost_found: "Datasets/Fishyscapes/FS_LostFound_full/images/*.png"
+    road_anomaly:           "Datasets/RoadAnomaly/images/*.jpg"
+    road_anomaly21:         "Datasets/SegmentMeIfYouCan/RoadAnomaly21/images/*.png"
+    road_obstacle21:        "Datasets/SegmentMeIfYouCan/RoadObsticle21/images/*.webp"
+
+  models:
+    trained_models_dir: "checkpoints"
+    erfnet_weights:     "checkpoints/erfnet_pretrained.pth"
+    erfnet_model:       "third_party/eval/erfnet.py"
+    eomt_base_checkpoint: "checkpoints/epoch_106-step_19902_eomt.ckpt"
+    eomt_checkpoint:    "checkpoints/solutions/20260514_153930/epoch_20_EoMT.pth"
+
+  logits:
+    erfnet: "core/evaluation/eval/saved_logits/erfnet"
+    eomt:   "core/evaluation/eomt/saved_logits/eomt"
+
+  tables:
+    main:        "results/TABLE.md"
+    temperature: "results/TABLE_T.md"
+
+  venvs:
+    eval_python: "core/evaluation/eval/.venv_eval/bin/python"
+    eomt_python: "core/evaluation/eomt/.venv_eomt/bin/python"
+
+# =============================================================================
+# Evaluation hyper-parameters
+# =============================================================================
+eval:
+  temperatures: [0.5, 0.75, 1.1]
+  num_classes: 20
+  ignore_index: 19
+# =============================================================================
+# Analysis parameters
+# =============================================================================
+analysis:
+  # Task 1: Semantics
+  n_bands: 5
+  boundary_kernel_size: 15
+  
+  # Task 2: Objects
+  thresh_small: 1000
+  thresh_medium: 5000
+  
+  # Task 3: Resolution & Attention
+  resolutions: [512, 768, 1024]
+  patch_size: 14
+  num_queries: 100
+  
+  # Output
+  reports_dir: "results/analysis_reports"
+  
+  # Plotting Defaults
+  plotting:
+    dpi: 150
+    figsize: [12, 6]
+    font_size: 12
+    theme: "dark"
+
+# =============================================================================
+# Solutions & Data Augmentation Parameters (Outlier Pasting & OOD Loss)
+# =============================================================================
+solutions:
+  augmentation:
+    p_apply: 0.7               # Probabilità di applicare l'outlier pasting (70%)
+    p_small: 0.75              # Bimodal Scale: favorisce ostacoli piccoli su strada
+    small_scale_range: [0.0005, 0.01] # Oggetti piccoli tipo detriti/bottiglie/sacchetti
+    large_scale_range: [0.03, 0.20]   # Limita i casi enormi per non sovra-specializzare
+    perspective_strength: 1.0  # Moltiplicatore Y-based (1 = attenua molto in lontananza)
+    boundary_rate: 0.10        # Meno boundary bias: più anomalie su road/flat pixels
+    # Classi Cityscapes critiche: building(2), wall(3), fence(4), pole(5), vegetation(8), terrain(9)
+    # L'ID Mapped di Cityscapes (trainId) è diverso:
+    # 2 (building)->2, 3 (wall)->3, 4 (fence)->4, 5 (pole)->5, 8 (vegetation)->8, 9 (terrain)->9
+    boundary_classes: [2, 3, 4, 5, 8, 9] 
+    alpha: 1.0                 # Hard pasting
+    edge_feathering: true      # Feather leggero per ridurre cue artificiali di bordo
+    noise_std: 0.0             # Evita che il modello impari rumore globale come scorciatoia
+  
+  training:
+    resume_from: null           # null: fresh run (new timestamped folder) | path: resume from that specific run folder
+                                # Accepts relative (to project root) or absolute paths.
+                                # Example: "checkpoints/solutions/20260504_014500"
+    epochs: 20
+    lr: 0.0001
+    batch_size: 1
+    num_workers: 4
+    ood_loss_type: "entropy_logit_norm"  # varianti: max_entropy, entropy_logit_norm, energy, logit_norm
+    ood_entropy_weight: 1.0
+    ood_logit_norm_weight: 0.05
+    ood_loss_weight: 1.0
+    ce_loss_weight: 2.0          # alzato da 1.0 → 2.0 per compensare il calo di mIoU
+    results_dir:    "results/solutions"      # log e output vari
+    checkpoint_dir: "checkpoints/solutions"  # salvataggio e caricamento checkpoint fine-tuned

@@ -46,6 +46,7 @@ def _load() -> SimpleNamespace:
     )
 
     def dict_to_ns(d):
+        """Recursively convert dictionaries into SimpleNamespace objects."""
         if not isinstance(d, dict):
             return d
         return SimpleNamespace(**{k: dict_to_ns(v) for k, v in d.items()})

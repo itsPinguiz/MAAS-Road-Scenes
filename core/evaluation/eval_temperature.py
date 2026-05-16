@@ -1,63 +1,28 @@
-# --- ENVIRONMENT SETUP BLOCK ---
 import os
 import sys
 
-# Add project root to path so core.* is importable
 _EVAL_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_EVAL_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from core.utility.config_loader import cfg
-
-# Unified Device Logic
-import torch
-def get_device():
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        return torch.device('mps')
-    else:
-        return torch.device('cpu')
-
-DEVICE = get_device()
-
-# GPU Health Check
-def print_gpu_health(device):
-    try:
-        from rich.console import Console
-        from rich.panel import Panel
-        console = Console()
-        details = f"[bold]Hardware environment:[/bold] {device.type.upper()}\n"
-        if device.type == 'cuda':
-            details += f"CUDA Device: {torch.cuda.get_device_name(device)}\n"
-            vram = torch.cuda.get_device_properties(device).total_memory / (1024**3)
-            details += f"Available VRAM: {vram:.2f} GB"
-        elif device.type == 'mps':
-            details += "Apple Silicon (MPS) detected."
-        else:
-            details += "[yellow]Running on CPU. Performance will be limited.[/yellow]"
-        console.print(Panel(details, title="[bold blue]GPU Health Check[/bold blue]", border_style="blue", expand=False))
-    except ImportError:
-        pass
-
-print_gpu_health(DEVICE)
-# --- END SETUP BLOCK ---
-
-import os
 import torch
 import numpy as np
 import glob
 import torch.nn.functional as F
 from PIL import Image
 from sklearn.metrics import average_precision_score
-import sys
 from argparse import ArgumentParser
 import warnings
 
+from core.utility.eval_common import OOD_DATASETS, cityscapes_label_mapping
+from core.utility.runtime import get_device, print_device_health
+
+DEVICE = get_device()
+
 warnings.filterwarnings("ignore", ".*'network' is an instance.*")
 
-# Import utility
 from core.utility.update_table_t import update_table_t_entry
 from core.utility.logger import logger, console
 from ood_metrics import fpr_at_95_tpr
@@ -65,12 +30,16 @@ from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, T
 from torchmetrics import JaccardIndex
 
 def get_msp_score(logits, T, device):
+    """Compute MSP anomaly scores after temperature scaling."""
     scaled_logits = logits / T
     probs = F.softmax(scaled_logits, dim=1)
     msp, _ = torch.max(probs, dim=1)
     return (1.0 - msp).squeeze().data.cpu().numpy()
 
 def main():
+    """Evaluate configured temperatures on saved logits and update TABLE_T."""
+    print_device_health(DEVICE)
+
     parser = ArgumentParser()
     parser.add_argument('--model', required=True, choices=['ERFNET', 'EOMT'])
     parser.add_argument('--logits_dir', required=True)
@@ -81,24 +50,8 @@ def main():
     logger.info(f"Using device: [bold cyan]{device}[/bold cyan]", extra={"markup": True})
 
     TEMPS = cfg.eval.temperatures
-    DATASETS = {
-        'RoadAnomaly21':           cfg.paths.datasets.road_anomaly21,
-        'RoadObsticle21':          cfg.paths.datasets.road_obstacle21,
-        'Fishyscapes Lost & Found': cfg.paths.datasets.fishyscapes_lost_found,
-        'Fishyscapes Static':      cfg.paths.datasets.fishyscapes_static,
-        'RoadAnomaly':             cfg.paths.datasets.road_anomaly,
-        'Cityscapes':              cfg.paths.datasets.cityscapes,
-    }
-
-    # Pre-calculate Cityscapes mapping
-    mapping_256 = np.ones(256, dtype=np.uint8) * 255
-    cityscapes_mapping = {
-        7: 0, 8: 1, 11: 2, 12: 3, 13: 4, 17: 5,
-        19: 6, 20: 7, 21: 8, 22: 9, 23: 10, 24: 11,
-        25: 12, 26: 13, 27: 14, 28: 15, 31: 16, 32: 17, 33: 18
-    }
-    for k, v in cityscapes_mapping.items():
-        mapping_256[k] = v
+    DATASETS = {**OOD_DATASETS, "Cityscapes": cfg.paths.datasets.cityscapes}
+    mapping_256 = cityscapes_label_mapping(ignore_index=255)
 
     for ds_name, ds_pattern in DATASETS.items():
         ds_slug = ds_name.replace(" ", "_")
@@ -129,7 +82,6 @@ def main():
                         logits = torch.load(l_path, map_location=device).to(device)
                         score = get_msp_score(logits, T, device)
                         
-                        # Mapping preciso della GT
                         base_name = os.path.basename(l_path).replace(".pt", "")
                         img_ref_list = glob.glob(ds_pattern.replace("*", base_name))
                         if not img_ref_list: 
@@ -144,7 +96,6 @@ def main():
                         gt_img = Image.open(gt_path).resize((score.shape[1], score.shape[0]), Image.NEAREST)
                         gt_np = np.array(gt_img)
     
-                        # Mappature OOD
                         if "RoadAnomaly" in ds_name: 
                             gt_np = np.where(gt_np==2, 1, gt_np)
                         elif "LostAndFound" in ds_name:
@@ -156,7 +107,7 @@ def main():
                         if np.any(mask):
                             all_scores.append(score[mask])
                             all_gts.append(gt_np[mask])
-                        del logits # Free the large tensor
+                        del logits
                         
                         progress.advance(task_id)
     
@@ -174,10 +125,7 @@ def main():
                 if auprc > best_metrics["auprc"]:
                     best_metrics.update({"auprc": auprc, "fpr95": fpr95, "t": T})
         
-        # If this was Cityscapes, we can calculate mIoU (it's independent of T)
         if ds_name == 'Cityscapes' and logit_files:
-            # We calculate mIoU once using T=1 (argmax is the same regardless of T)
-            # Use the first T or just default 1.0
             T_ref = 1.0
             metric = JaccardIndex(task="multiclass", num_classes=19, ignore_index=255).to(device)
             
@@ -185,11 +133,7 @@ def main():
                 logits = torch.load(l_path, map_location=device).to(device)
                 preds = torch.argmax(logits, dim=1)
                 
-                # GT mapping
                 base_name = os.path.basename(l_path).replace(".pt", "")
-                # Cityscapes logit filename might be 'frankfurt_000000_000279_leftImg8bit.pt'
-                # or similar. We need to find the matching GT.
-                # Search recursively in ds_pattern (which is cfg.paths.datasets.cityscapes)
                 img_ref_list = []
                 for root, dirs, files in os.walk(ds_pattern):
                     for file in files:
@@ -210,7 +154,6 @@ def main():
                 label_mapped_np = mapping_256[label_raw_np]
                 label_tensor = torch.from_numpy(label_mapped_np).to(device)
                 
-                # Resize preds to match label if needed (ERFNet uses 512, EoMT 1024)
                 if preds.shape[-2:] != label_tensor.shape[-2:]:
                     preds_reshaped = F.interpolate(preds.unsqueeze(1).float(), 
                                                  size=label_tensor.shape[-2:], 
@@ -224,7 +167,6 @@ def main():
             miou = metric.compute().item() * 100
             logger.info(f" [bold green]mIoU (Cityscapes): {miou:.2f}%[/bold green]")
             
-            # Update mIoU for all temperatures of this model
             for T in TEMPS:
                 update_table_t_entry(args.model, f"MSP (t = {T})", miou=f"{miou:.2f}")
             update_table_t_entry(args.model, "MSP (best t)", miou=f"{miou:.2f}")

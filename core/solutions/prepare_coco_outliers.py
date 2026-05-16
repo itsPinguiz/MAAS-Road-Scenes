@@ -1,62 +1,89 @@
 import os
-import cv2
+import sys
+import argparse
 import numpy as np
 from PIL import Image
 from pycocotools.coco import COCO
 import random
-from alive_progress import alive_bar # opzionale, in alternativa log basico
 from collections import defaultdict
 import logging
 
-# --- CONFIGURAZIONI GLOBALI ---
-# Aggiorna questi percorsi in base alla struttura locale del tuo download COCO
-IMG_DIR = "/mnt/Shared-Data/Code/github/itsPinguiz/MAAS-Road-Scenes/Datasets/COCO/val2017"
-ANN_FILE = "/mnt/Shared-Data/Code/github/itsPinguiz/MAAS-Road-Scenes/Datasets/COCO/annotations_trainval2017/annotations/instances_val2017.json"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
-# Abbiamo assunto che lo script venga lanciato dalla root (o configuralo assoluto)
-OUTPUT_DIR = os.path.join("Datasets", "Outliers_COCO")
+from core.utility.config_loader import cfg
 
-# Classi ritenute ideali come "Anomalie Stradali" 
+DEFAULT_IMG_DIR = os.path.join(cfg.paths.root, "Datasets", "COCO", "val2017")
+DEFAULT_ANN_FILE = os.path.join(
+    cfg.paths.root,
+    "Datasets",
+    "COCO",
+    "annotations_trainval2017",
+    "annotations",
+    "instances_val2017.json",
+)
+DEFAULT_OUTPUT_DIR = os.path.join(cfg.paths.root, "Datasets", "Outliers_COCO")
+
+# COCO classes that make plausible road-scene anomalies.
 VALID_CLASSES = [
-    'dog', 'cat', 'cow', 'sheep', 
-    'suitcase', 'frisbee', 'sports ball', 
-    'chair', 'couch', 'potted plant',
-    'bear', 'horse', 'backpack', 'umbrella', 'trash can' # bonus safe-classes valutabili
+    'dog', 'cat', 'cow', 'sheep', 'bear', 'horse',
+    'backpack', 'umbrella', 'handbag', 'suitcase',
+    'frisbee', 'sports ball', 'skateboard',
+    'bottle', 'cup', 'bowl', 'banana', 'apple', 'orange',
+    'chair', 'couch', 'potted plant', 'teddy bear',
 ]
 
-# Numero massimo di cutout per classe per mantenere bilanciamento e non saturare le CPU
-MAX_SAMPLES_PER_CLASS = 100 
+MAX_SAMPLES_PER_CLASS = 150
+MIN_ANN_AREA = 300
 
-# Logger Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def main():
-    if not os.path.exists(ANN_FILE) or not os.path.exists(IMG_DIR):
-        logger.error(f"Errore: i percorsi IMG_DIR o ANN_FILE non sono stati trovati.\nAssicurati di assegnare i path reali in cima a questo script.\nIMG: {IMG_DIR}\nANN: {ANN_FILE}")
+def parse_args():
+    """Parse COCO cutout extraction arguments."""
+    parser = argparse.ArgumentParser(description="Extract RGBA OOD cutouts from COCO instances.")
+    parser.add_argument("--img-dir", default=DEFAULT_IMG_DIR)
+    parser.add_argument("--ann-file", default=DEFAULT_ANN_FILE)
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--max-samples-per-class", type=int, default=MAX_SAMPLES_PER_CLASS)
+    parser.add_argument("--min-ann-area", type=int, default=MIN_ANN_AREA)
+    parser.add_argument("--seed", type=int, default=None)
+    return parser.parse_args()
+
+def main(
+    img_dir=DEFAULT_IMG_DIR,
+    ann_file=DEFAULT_ANN_FILE,
+    output_dir=DEFAULT_OUTPUT_DIR,
+    max_samples_per_class=MAX_SAMPLES_PER_CLASS,
+    min_ann_area=MIN_ANN_AREA,
+    seed=None,
+):
+    """Extract selected COCO object instances as transparent PNG cutouts."""
+    if seed is not None:
+        random.seed(seed)
+
+    if not os.path.exists(ann_file) or not os.path.exists(img_dir):
+        logger.error(f"Image directory or annotation file not found.\nIMG: {img_dir}\nANN: {ann_file}")
         return
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    logger.info("Inizializzazione PyCocoTools in corso...")
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info("Initializing PyCocoTools...")
     
-    # Inizializza l'API COCO (Carica JSON in memoria, può metterci un po')
-    coco = COCO(ANN_FILE)
+    coco = COCO(ann_file)
     
-    # Crea mappa per gli ID Classe basati solo su quelli che ci interessano
     class_ids = coco.getCatIds(catNms=VALID_CLASSES)
     categories = coco.loadCats(class_ids)
     cat_id_to_name = {cat['id']: cat['name'] for cat in categories}
     
-    # Array per raggruppare le annotazioni compatibili (per classe)
     annotations_by_class = defaultdict(list)
     
-    # Popoliamo le annotazioni pre-selezionate controllando l'area in canali validi
     for cat_id in class_ids:
-        ann_ids = coco.getAnnIds(catIds=cat_id, iscrowd=False) # iscrowd=False ignora segmentazioni vaghe
+        ann_ids = coco.getAnnIds(catIds=cat_id, iscrowd=False)
         anns = coco.loadAnns(ann_ids)
         for ann in anns:
-            # Filtro rapido per scartare annotazioni corrotte o troppo piccole prima ancora di caricarle
-            if ann['area'] > 2500 and len(ann.get('segmentation', [])) > 0:
+            if ann['area'] >= min_ann_area and len(ann.get('segmentation', [])) > 0:
                 annotations_by_class[cat_id].append(ann)
     
     total_extracted = 0
@@ -64,31 +91,23 @@ def main():
     for cat_id, name in cat_id_to_name.items():
         anns_for_class = annotations_by_class[cat_id]
         
-        # Campionamento Casuale
-        if len(anns_for_class) > MAX_SAMPLES_PER_CLASS:
-            anns_for_class = random.sample(anns_for_class, MAX_SAMPLES_PER_CLASS)
+        if len(anns_for_class) > max_samples_per_class:
+            anns_for_class = random.sample(anns_for_class, max_samples_per_class)
             
-        logger.info(f"Classe [{name}]: elaborazione di {len(anns_for_class)} istanze...")
+        logger.info(f"Class [{name}]: processing {len(anns_for_class)} instances...")
         
         for ann in anns_for_class:
             try:
-                # Recupera e apri immagine fisica
                 img_data = coco.loadImgs(ann['image_id'])[0]
-                img_path = os.path.join(IMG_DIR, img_data['file_name'])
+                img_path = os.path.join(img_dir, img_data['file_name'])
                 
                 if not os.path.exists(img_path):
                     continue
                 
-                # Apre immagine in RGB convertendola via PIL e numpy
                 img_rgb = np.array(Image.open(img_path).convert('RGB'))
-                
-                # Decodifica segmentazione poligonale in una Mask Numpy (0=bg, 1=fg)
                 mask = coco.annToMask(ann)
-                
-                # Ricava BBOX intero 
                 x_bbox, y_bbox, w_bbox, h_bbox = [int(v) for v in ann['bbox']]
                 
-                # Sanity test estremo: check BBOX limiti per non crashare
                 if w_bbox <= 0 or h_bbox <= 0:
                     continue
                     
@@ -97,35 +116,35 @@ def main():
                 x_max = min(img_rgb.shape[1], x_bbox + w_bbox)
                 y_max = min(img_rgb.shape[0], y_bbox + h_bbox)
                 
-                # Crop di immagine e mask alla bounding box esatta
                 img_crop = img_rgb[y_min:y_max, x_min:x_max]
                 mask_crop = mask[y_min:y_max, x_min:x_max]
                 
-                # Generazione dei 4 canali RGBA
-                # 1. Crea uno shallow space RGBA dello stesso shape del crop ma 4 Canali (Alpha)
-                # Inizializziamo a zero per trasparenza totale base
                 rgba_crop = np.zeros((img_crop.shape[0], img_crop.shape[1], 4), dtype=np.uint8)
                 
-                # 2. Inseriamo i valori RGB pre-esistenti originali e l'alpha mask a 255 dove = 1 
-                # (Sfruttiamo broadcasting booleano veloce Numpy)
                 fg_indices = (mask_crop == 1)
-                rgba_crop[fg_indices, 0:3] = img_crop[fg_indices]  # Red Green Blue
-                rgba_crop[fg_indices, 3] = 255                     # Alpha a 100% visibile 
+                rgba_crop[fg_indices, 0:3] = img_crop[fg_indices]
+                rgba_crop[fg_indices, 3] = 255
                 
-                # Costruisce Image PIL e salva RGBA su disco
                 result_img = Image.fromarray(rgba_crop, 'RGBA')
                 
-                save_path = os.path.join(OUTPUT_DIR, f"{name}_{ann['id']}.png")
+                save_path = os.path.join(output_dir, f"{name}_{ann['id']}.png")
                 result_img.save(save_path, "PNG")
                 total_extracted += 1
 
             except Exception as e:
-                # Gestisce rare eccezioni come immagini danneggiate, memory overflow in poligoni non validi, ecc.
-                logger.debug(f"Errore annotazione {ann['id']}: {e}")
+                logger.debug(f"Annotation {ann['id']} failed: {e}")
                 continue
 
-    logger.info(f"Estrazione OOD Completata! Generati: {total_extracted} outlier puri con trasparenza.")
-    logger.info(f"Risultati disponibili in: {OUTPUT_DIR}")
+    logger.info(f"OOD extraction complete. Generated {total_extracted} transparent cutouts.")
+    logger.info(f"Results available in: {output_dir}")
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(
+        img_dir=args.img_dir,
+        ann_file=args.ann_file,
+        output_dir=args.output_dir,
+        max_samples_per_class=args.max_samples_per_class,
+        min_ann_area=args.min_ann_area,
+        seed=args.seed,
+    )

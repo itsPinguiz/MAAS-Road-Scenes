@@ -8,6 +8,7 @@ SUCCESS_LEVEL = 25
 logging.addLevelName(SUCCESS_LEVEL, "SUCCESS")
 
 def success(self, message, *args, **kws):
+    """Log a message with the custom SUCCESS level."""
     if self.isEnabledFor(SUCCESS_LEVEL):
         self._log(SUCCESS_LEVEL, message, args, **kws)
 

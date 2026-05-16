@@ -1,1 +1,1 @@
-# core/analysis — Fine-grained anomaly detection analysis modules.
+"""Fine-grained anomaly detection analysis modules."""

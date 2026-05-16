@@ -54,7 +54,7 @@ import glob
 import argparse
 import textwrap
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
@@ -63,9 +63,6 @@ import torch.nn.functional as F
 from sklearn.metrics import average_precision_score
 from ood_metrics import fpr_at_95_tpr
 
-# ---------------------------------------------------------------------------
-# Project-root bootstrap (works regardless of CWD)
-# ---------------------------------------------------------------------------
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
 if _ROOT not in sys.path:
@@ -73,6 +70,7 @@ if _ROOT not in sys.path:
 
 from core.utility.logger import logger
 from core.utility.config_loader import cfg
+from core.utility.eval_common import gt_path_from_image, load_logits, load_ood_mask
 from core.analysis.plot_utils import (
     apply_style, save_fig, plot_grouped_bar, plot_metric_heatmap, PALETTE,
 )
@@ -81,15 +79,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# ---------------------------------------------------------------------------
-# Cityscapes class constants (used for GT-boundary extraction on city masks)
-# ---------------------------------------------------------------------------
-IGNORE_INDEX = cfg.eval.ignore_index   # pixels to skip in all evaluations
-
-
-# ===========================================================================
-# SECTION 1 — METRICS HELPERS
-# ===========================================================================
+IGNORE_INDEX = cfg.eval.ignore_index
 
 def compute_metrics(scores: np.ndarray, labels: np.ndarray) -> Tuple[float, float]:
     """
@@ -118,30 +108,6 @@ def compute_metrics(scores: np.ndarray, labels: np.ndarray) -> Tuple[float, floa
     return auprc, fpr95
 
 
-# ===========================================================================
-# SECTION 2 — LOGIT LOADING & ANOMALY SCORING
-# ===========================================================================
-
-def load_logits(logit_path: str) -> torch.Tensor:
-    """
-    Load a saved logit tensor from disk.
-
-    Handles:
-    - Shape (1, C, H, W) or (C, H, W) — returns (1, C, H, W).
-    - CPU or GPU storage — always loaded to CPU.
-
-    Args:
-        logit_path: Absolute path to the .pt logit file.
-
-    Returns:
-        Float tensor of shape (1, C, H, W).
-    """
-    t = torch.load(logit_path, map_location="cpu")
-    if t.dim() == 3:
-        t = t.unsqueeze(0)
-    return t.float()
-
-
 def compute_all_scores(logits: torch.Tensor) -> Dict[str, np.ndarray]:
     """
     Compute MSP, MaxLogit, and MaxEntropy anomaly scores from a logit tensor.
@@ -153,10 +119,10 @@ def compute_all_scores(logits: torch.Tensor) -> Dict[str, np.ndarray]:
         Dict mapping method name to 2-D numpy anomaly score map (H, W).
         Higher score = higher probability of being OOD.
     """
-    probs    = F.softmax(logits, dim=1)                              # (1,C,H,W)
-    msp      = 1.0 - probs.max(dim=1).values                        # (1,H,W)
-    maxlogit = -logits.max(dim=1).values                            # (1,H,W)
-    entropy  = -(probs * torch.log(probs + 1e-12)).sum(dim=1)       # (1,H,W)
+    probs = F.softmax(logits, dim=1)
+    msp = 1.0 - probs.max(dim=1).values
+    maxlogit = -logits.max(dim=1).values
+    entropy = -(probs * torch.log(probs + 1e-12)).sum(dim=1)
 
     return {
         "msp":        msp.squeeze(0).numpy(),
@@ -164,80 +130,6 @@ def compute_all_scores(logits: torch.Tensor) -> Dict[str, np.ndarray]:
         "maxentropy": entropy.squeeze(0).numpy(),
     }
 
-
-# ===========================================================================
-# SECTION 3 — GROUND TRUTH LOADING & NORMALISATION
-# ===========================================================================
-
-def load_gt_mask(gt_path: str, target_size: Tuple[int, int], dataset_type: str) -> np.ndarray:
-    """
-    Load and normalise a ground-truth anomaly mask.
-
-    Args:
-        gt_path:      Path to the GT mask image.
-        target_size:  (H, W) to resize to (must match logit spatial dims).
-        dataset_type: One of 'fs_static', 'road_anomaly', 'road_anomaly21',
-                      'road_obstacle21', 'lost_found'.
-
-    Returns:
-        Uint8 array of shape (H, W) with values:
-            0   = in-distribution
-            1   = OOD anomaly
-            IGNORE_INDEX = ignore
-    """
-    mask = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
-    if mask is None:
-        raise FileNotFoundError(f"GT mask not found: {gt_path}")
-
-    # Resize with NEAREST to preserve label values
-    mask = cv2.resize(mask, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
-
-    # Dataset-specific label remapping
-    if dataset_type == "road_anomaly":
-        # label 2 = anomaly in RoadAnomaly
-        mask = np.where(mask == 2, 1, mask).astype(np.uint8)
-
-    elif dataset_type == "streethazard":
-        # 14 = special ignore, <20 = in-dist, rest = OOD
-        out = np.full_like(mask, IGNORE_INDEX)
-        out[mask < 20] = 0
-        out[mask >= 20] = 1
-        out[mask == 14] = IGNORE_INDEX
-        mask = out
-
-    # assume 0 = in-dist, 1 = OOD, IGNORE_INDEX = ignore — no remapping needed.
-    
-    # Final safety remap: some datasets use 255 for ignore, but we want to stick to config's ignore_index
-    if IGNORE_INDEX != 255:
-        mask[mask == 255] = IGNORE_INDEX
-
-    return mask.astype(np.uint8)
-
-
-def gt_path_from_image(image_path: str, dataset_type: str) -> str:
-    """
-    Derive the GT mask path from an image path using dataset conventions.
-
-    Args:
-        image_path:   Path to the input image.
-        dataset_type: Dataset identifier string.
-
-    Returns:
-        Expected path of the corresponding GT mask.
-    """
-    gt = image_path.replace("images", "labels_masks")
-    if dataset_type == "road_obstacle21":
-        gt = gt.replace(".webp", ".png")
-    elif dataset_type == "fs_static":
-        gt = gt.replace(".jpg", ".png")
-    elif dataset_type in ("road_anomaly", "road_anomaly21"):
-        gt = gt.replace(".jpg", ".png")
-    return gt
-
-
-# ===========================================================================
-# SECTION 4 — SEMANTIC BOUNDARY EXTRACTION (MORPHOLOGICAL)
-# ===========================================================================
 
 def extract_boundary_mask(
     gt_mask: np.ndarray,
@@ -275,13 +167,10 @@ def extract_boundary_mask(
         cv2.MORPH_RECT, (kernel_size, kernel_size)
     )
 
-    # Binary map: valid pixels only (ignore 255)
     valid = (gt_mask != IGNORE_INDEX).astype(np.uint8)
 
-    # We compute boundary on the OOD mask (label == 1)
     ood_binary = ((gt_mask == 1) & (valid == 1)).astype(np.uint8)
 
-    # If there are no OOD pixels at all, return empty masks
     if ood_binary.max() == 0:
         flat_mask     = valid.astype(bool)
         boundary_mask = np.zeros_like(flat_mask)
@@ -290,19 +179,12 @@ def extract_boundary_mask(
     dilated = cv2.dilate(ood_binary, kernel, iterations=1)
     eroded  = cv2.erode(ood_binary, kernel, iterations=1)
 
-    # Boundary = pixels that disappeared on erosion OR appeared on dilation
     raw_boundary = ((dilated - eroded) > 0)
-
-    # Restrict to valid pixels only
     boundary_mask = raw_boundary & (valid.astype(bool))
     flat_mask     = (~boundary_mask) & (valid.astype(bool))
 
     return boundary_mask, flat_mask
 
-
-# ===========================================================================
-# SECTION 5 — DEPTH BAND PARTITIONING
-# ===========================================================================
 
 def make_depth_bands(height: int, n_bands: int) -> List[Tuple[int, int]]:
     """
@@ -344,10 +226,6 @@ def depth_band_label(band_idx: int, n_bands: int) -> str:
     return f"{tag} (B{band_idx})"
 
 
-# ===========================================================================
-# SECTION 6 — MAIN ANALYSIS RUNNER
-# ===========================================================================
-
 class SemanticAnalyser:
     """
     Orchestrates semantic boundary and depth-band metric computation.
@@ -377,7 +255,6 @@ class SemanticAnalyser:
         boundary_kernel: int  = 15,
         out_dir:         str  = None,
     ) -> None:
-        # Resolve logits_dir: if relative, anchor to project root (not CWD)
         if not os.path.isabs(logits_dir):
             logits_dir = os.path.normpath(os.path.join(cfg.paths.root, logits_dir))
         self.logits_dir      = logits_dir
@@ -390,31 +267,22 @@ class SemanticAnalyser:
             cfg.paths.root, cfg.analysis.reports_dir, "semantics"
         )
 
-        # Accumulators — initialised in run()
-        # boundary/flat: {method: {'scores': [], 'labels': []}}
         self._boundary_acc: Dict[str, Dict[str, List]] = {}
         self._flat_acc:     Dict[str, Dict[str, List]] = {}
 
-        # depth: {band_idx: {method: {'scores': [], 'labels': []}}}
         self._band_acc: Dict[int, Dict[str, Dict[str, List]]] = {}
-
-    # -----------------------------------------------------------------------
-    # Public API
-    # -----------------------------------------------------------------------
 
     def run(self) -> None:
         """
         Main entry point: load all logit/GT pairs, accumulate statistics,
         compute metrics, plot results, and save a text summary.
         """
-        # --- Validate logits directory before doing anything else ---
         if not os.path.isdir(self.logits_dir):
             logger.error(
                 f"Logits directory not found: {self.logits_dir}\n"
                 f"  Tip: check that logits were saved by running evalAnomaly.py "
                 f"with --save_logits, then pass the correct sub-folder name."
             )
-            # List sibling directories to help the user pick the right one
             parent = os.path.dirname(self.logits_dir)
             if os.path.isdir(parent):
                 siblings = sorted(os.listdir(parent))
@@ -465,16 +333,11 @@ class SemanticAnalyser:
 
         logger.info(f"Processed {n_processed}/{len(image_paths)} images.")
 
-        # Compute and display metrics
         boundary_results, flat_results = self._compute_boundary_metrics()
         band_results = self._compute_depth_metrics()
 
         self._print_summary(boundary_results, flat_results, band_results)
         self._save_plots(boundary_results, flat_results, band_results)
-
-    # -----------------------------------------------------------------------
-    # Private helpers
-    # -----------------------------------------------------------------------
 
     def _init_accumulators(self) -> None:
         """Initialise empty accumulator dicts."""
@@ -492,18 +355,16 @@ class SemanticAnalyser:
         Load one logit file and its GT mask, extract boundary/flat/band
         partitions, and accumulate scores + labels.
         """
-        logits = load_logits(logit_path)        # (1, C, H, W)
+        logits = load_logits(logit_path)
         H, W   = logits.shape[2], logits.shape[3]
 
-        gt_mask = load_gt_mask(gt_path, (H, W), self.dataset_type)
+        gt_mask = load_ood_mask(gt_path, (H, W), self.dataset_type)
 
-        # Skip entirely if no OOD pixels present
         if 1 not in np.unique(gt_mask):
             return
 
-        scores_dict = compute_all_scores(logits)   # {method: H×W ndarray}
+        scores_dict = compute_all_scores(logits)
 
-        # --- Part 1: Boundary extraction ---
         boundary_mask, flat_mask = extract_boundary_mask(
             gt_mask, self.boundary_kernel
         )
@@ -518,15 +379,12 @@ class SemanticAnalyser:
             self._flat_acc[method]["scores"].append(s_flat[flat_mask.flatten()])
             self._flat_acc[method]["labels"].append(gt_flat[flat_mask.flatten()])
 
-        # --- Part 2: Depth band partitioning ---
         bands = make_depth_bands(H, self.n_bands)
         for band_idx, (r_start, r_end) in enumerate(bands):
-            # Build a row-mask for this band (H×W)
             band_row_mask = np.zeros(H, dtype=bool)
             band_row_mask[r_start:r_end] = True
-            band_pixel_mask = np.tile(band_row_mask[:, np.newaxis], (1, W))  # H×W
+            band_pixel_mask = np.tile(band_row_mask[:, np.newaxis], (1, W))
 
-            # Intersect with valid pixels
             valid_in_band = band_pixel_mask.flatten() & (gt_flat != IGNORE_INDEX)
 
             for method, scores in scores_dict.items():
@@ -576,10 +434,6 @@ class SemanticAnalyser:
                 band_results[band_idx][method] = compute_metrics(scores, labels)
         return band_results
 
-    # -----------------------------------------------------------------------
-    # Reporting
-    # -----------------------------------------------------------------------
-
     def _print_summary(
         self,
         boundary_results: Dict,
@@ -597,7 +451,6 @@ class SemanticAnalyser:
         )
         lines.append(sep)
 
-        # Boundary vs Flat
         lines.append("")
         lines.append("  REGION ANALYSIS")
         lines.append(f"  {'Method':<15} {'Region':<12} {'AuPRC %':>10} {'FPR95 %':>10}")
@@ -610,7 +463,6 @@ class SemanticAnalyser:
             lines.append(f"  {m_label:<15} {'boundary':<12} {b_auprc:>10.2f} {b_fpr95:>10.2f}")
             lines.append(f"  {'':<15} {'flat':<12} {f_auprc:>10.2f} {f_fpr95:>10.2f}")
 
-        # Depth bands
         lines.append("")
         lines.append("  DEPTH BAND ANALYSIS (AuPRC %)")
         band_labels = [depth_band_label(b, self.n_bands) for b in range(self.n_bands)]
@@ -627,11 +479,9 @@ class SemanticAnalyser:
 
         lines.append(sep)
 
-        # Print to logger
         for line in lines:
             logger.info(line)
 
-        # Save to file
         os.makedirs(self.out_dir, exist_ok=True)
         summary_path = os.path.join(
             self.out_dir, f"summary_semantics_{self.dataset_type}_{self.model_name}.txt"
@@ -650,9 +500,6 @@ class SemanticAnalyser:
         apply_style()
         dataset_tag = f"{self.dataset_type}_{self.model_name}"
 
-        # ------------------------------------------------------------------
-        # Plot 1 — Grouped bar: Boundary vs Flat (AuPRC)
-        # ------------------------------------------------------------------
         auprc_data: Dict[str, Dict[str, float]] = {}
         for method in self.METHODS:
             auprc_data.setdefault("Boundary", {})[method] = boundary_results[method][0]
@@ -667,9 +514,6 @@ class SemanticAnalyser:
         )
         logger.info(f"Saved boundary AuPRC plot: {paths}")
 
-        # ------------------------------------------------------------------
-        # Plot 2 — Grouped bar: Boundary vs Flat (FPR95)
-        # ------------------------------------------------------------------
         fpr95_data: Dict[str, Dict[str, float]] = {}
         for method in self.METHODS:
             fpr95_data.setdefault("Boundary", {})[method] = boundary_results[method][1]
@@ -685,16 +529,13 @@ class SemanticAnalyser:
         )
         logger.info(f"Saved boundary FPR95 plot: {paths}")
 
-        # ------------------------------------------------------------------
-        # Plot 3 — Heatmap: AuPRC per band × method
-        # ------------------------------------------------------------------
         band_labels = [depth_band_label(b, self.n_bands) for b in range(self.n_bands)]
         method_labels_list = [m.upper() for m in self.METHODS]
 
         auprc_matrix = np.array([
             [band_results[b][m][0] for b in range(self.n_bands)]
             for m in self.METHODS
-        ])  # shape: (n_methods, n_bands)
+        ])
 
         paths = plot_metric_heatmap(
             matrix=auprc_matrix,
@@ -707,9 +548,6 @@ class SemanticAnalyser:
         )
         logger.info(f"Saved depth AuPRC heatmap: {paths}")
 
-        # ------------------------------------------------------------------
-        # Plot 4 — Heatmap: FPR95 per band × method
-        # ------------------------------------------------------------------
         fpr95_matrix = np.array([
             [band_results[b][m][1] for b in range(self.n_bands)]
             for m in self.METHODS
@@ -726,10 +564,6 @@ class SemanticAnalyser:
         )
         logger.info(f"Saved depth FPR95 heatmap: {paths}")
 
-        # ------------------------------------------------------------------
-        # Plot 5 — Composite: Boundary delta (Flat - Boundary) per method
-        #          Positive delta = method is better in flat regions
-        # ------------------------------------------------------------------
         self._plot_boundary_delta(boundary_results, flat_results, dataset_tag)
 
     def _plot_boundary_delta(
@@ -786,11 +620,8 @@ class SemanticAnalyser:
         logger.info(f"Saved boundary delta plot: {saved}")
 
 
-# ===========================================================================
-# SECTION 7 — CLI ENTRY POINT
-# ===========================================================================
-
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for semantic boundary/depth analysis."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent("""\
@@ -845,6 +676,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run semantic boundary/depth analysis from CLI arguments."""
     args    = parse_args()
     analyser = SemanticAnalyser(
         logits_dir      = args.logits_dir,

@@ -15,7 +15,7 @@ Usage:
 import os
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")           # Non-interactive backend (safe for servers)
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
@@ -23,11 +23,6 @@ from typing import Dict, List, Optional, Tuple
 
 from core.utility.config_loader import cfg
 
-# ---------------------------------------------------------------------------
-# Design System
-# ---------------------------------------------------------------------------
-
-# Publication-ready color palette (colorblind-friendly)
 PALETTE = {
     "msp":        "#4E79A7",   # Blue
     "maxlogit":   "#F28E2B",   # Orange
@@ -42,7 +37,6 @@ PALETTE = {
     "grid":       "#2D2D4E",
 }
 
-# Consistent method label mapping
 METHOD_LABELS: Dict[str, str] = {
     "msp":        "MSP",
     "maxlogit":   "MaxLogit",
@@ -50,14 +44,9 @@ METHOD_LABELS: Dict[str, str] = {
     "rba":        "RBA",
 }
 
-# Default figure size
 DEFAULT_FIGSIZE = tuple(cfg.analysis.plotting.figsize)
 DEFAULT_DPI     = cfg.analysis.plotting.dpi
 
-
-# ---------------------------------------------------------------------------
-# Style Application
-# ---------------------------------------------------------------------------
 
 def apply_style() -> None:
     """
@@ -65,7 +54,6 @@ def apply_style() -> None:
     Should be called once at the top of every analysis script.
     """
     plt.rcParams.update({
-        # Font
         "font.family":          "DejaVu Sans",
         "font.size":            cfg.analysis.plotting.font_size,
         "axes.titlesize":       cfg.analysis.plotting.font_size + 2,
@@ -75,7 +63,6 @@ def apply_style() -> None:
         "legend.fontsize":      cfg.analysis.plotting.font_size - 2,
         "figure.titlesize":     cfg.analysis.plotting.font_size + 4,
 
-        # Colors
         "figure.facecolor":     PALETTE["bg"],
         "axes.facecolor":       PALETTE["surface"],
         "text.color":           PALETTE["text"],
@@ -87,23 +74,17 @@ def apply_style() -> None:
         "legend.facecolor":     PALETTE["surface"],
         "legend.edgecolor":     PALETTE["grid"],
 
-        # Lines / Grid
         "axes.grid":            True,
         "grid.linestyle":       "--",
         "grid.alpha":           0.4,
         "lines.linewidth":      2.0,
 
-        # Layout
         "figure.dpi":           DEFAULT_DPI,
         "savefig.dpi":          DEFAULT_DPI,
         "savefig.facecolor":    PALETTE["bg"],
         "savefig.bbox":         "tight",
     })
 
-
-# ---------------------------------------------------------------------------
-# Save Helper
-# ---------------------------------------------------------------------------
 
 def save_fig(
     fig: plt.Figure,
@@ -132,10 +113,6 @@ def save_fig(
     plt.close(fig)
     return saved
 
-
-# ---------------------------------------------------------------------------
-# Grouped Bar Chart
-# ---------------------------------------------------------------------------
 
 def plot_grouped_bar(
     data: Dict[str, Dict[str, float]],
@@ -171,7 +148,7 @@ def plot_grouped_bar(
     n_methods   = len(methods)
 
     x      = np.arange(n_cats)
-    width  = 0.75 / n_methods   # total bar group width = 0.75
+    width = 0.75 / n_methods
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -184,7 +161,6 @@ def plot_grouped_bar(
             label=METHOD_LABELS.get(method, method.upper()),
             color=color, alpha=0.85, edgecolor="white", linewidth=0.5,
         )
-        # Value labels on bars
         for bar, val in zip(bars, values):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -203,10 +179,6 @@ def plot_grouped_bar(
     fig.tight_layout()
     return save_fig(fig, out_dir, filename)
 
-
-# ---------------------------------------------------------------------------
-# Metric Heatmap
-# ---------------------------------------------------------------------------
 
 def plot_metric_heatmap(
     matrix: np.ndarray,
@@ -251,10 +223,6 @@ def plot_metric_heatmap(
     return save_fig(fig, out_dir, filename)
 
 
-# ---------------------------------------------------------------------------
-# AuPRC vs FPS Scatter
-# ---------------------------------------------------------------------------
-
 def plot_auprc_vs_fps(
     results: List[Dict],
     out_dir: str,
@@ -291,10 +259,6 @@ def plot_auprc_vs_fps(
     return save_fig(fig, out_dir, filename)
 
 
-# ---------------------------------------------------------------------------
-# Attention Overlay
-# ---------------------------------------------------------------------------
-
 def plot_attention_overlay(
     image_rgb: np.ndarray,
     attn_map: np.ndarray,
@@ -321,18 +285,15 @@ def plot_attention_overlay(
     apply_style()
     fig, axes = plt.subplots(1, 3, figsize=figsize)
 
-    # Panel 1 — Original image
     axes[0].imshow(image_rgb)
     axes[0].set_title("Input Image")
     cy, cx = anomaly_centroid
     axes[0].scatter([cx], [cy], s=60, c="r", marker="x", linewidths=1.5)
 
-    # Panel 2 — GT anomaly mask
     axes[1].imshow(image_rgb, alpha=0.4)
     axes[1].imshow(gt_mask, cmap="Reds", alpha=0.6, vmin=0, vmax=1)
     axes[1].set_title("GT Anomaly Mask")
 
-    # Panel 3 — Attention heatmap overlay
     axes[2].imshow(image_rgb, alpha=0.5)
     im = axes[2].imshow(attn_map, cmap="inferno", alpha=0.6, vmin=0, vmax=1)
     axes[2].set_title("Self-Attention (last ViT block)")

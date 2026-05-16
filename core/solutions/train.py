@@ -1,43 +1,34 @@
 import os
 import sys
-import yaml
-import importlib
 import gc
 from datetime import datetime
 
-# FIX OOM: riduce la frammentazione della memoria CUDA su run lunghe
+# Reduce CUDA memory fragmentation on long runs.
 os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
 
-# Assicuriamoci che python estragga la base root del progetto per i moduli core.*
 _SOLUTIONS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_SOLUTIONS_DIR))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-# Aggiungiamo anche la directory di EoMT per mappare correttamente gli import dinamici
 _EOMT_DIR = os.path.join(_ROOT, "third_party", "eomt")
 if _EOMT_DIR not in sys.path:
     sys.path.insert(0, _EOMT_DIR)
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# Import utility
 from core.utility.config_loader import cfg
-from core.utility.logger import logger, console
+from core.utility.logger import logger
 
-# Import nuovi moduli
-from core.solutions.augmentation import PerspectiveOutlierPasting
 from core.solutions.losses import CombinedFineTuningLoss
 from core.solutions.dataset import OutlierAugmentedDataset
-from third_party.eval.dataset import cityscapes
 
 def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 1024)):
-    """
-    Ripristina la struttura dell'architettura EoMT e la ripopola con i pesi addestrati.
-    """
-    logger.info("Caricamento architettura EoMT statica...")
+    """Build the EoMT architecture and load pretrained weights."""
+    logger.info("Loading EoMT architecture...")
     from models.vit import ViT
     from models.eomt import EoMT
     from training.mask_classification_semantic import MaskClassificationSemantic
@@ -63,38 +54,32 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
         attn_mask_annealing_enabled=True,
     ).to(device)
 
-    # Load Checkpoint State Dict
-    logger.info(f"Caricamento Pesi Pre-Addestrati da: {checkpoint_path}")
+    logger.info(f"Loading pretrained weights from: {checkpoint_path}")
     
     try:
         ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
         state_dict = ckpt.get("state_dict", ckpt)
         
-        # FIX: Pulizia dei prefissi di PyTorch Lightning per matchare la struttura pura
         clean_state_dict = {}
         for k, v in state_dict.items():
-            # Rimuoviamo i prefissi generati dai wrapper Lightning, mantendo la dicitura pura PyTorch ('network')
             new_k = k.replace("model.", "")
             clean_state_dict[new_k] = v
             
-        # FIX: Manteniamo strict=True. Se fallisce ora, vogliamo che il programma si fermi!
         model.load_state_dict(clean_state_dict, strict=True)
-        logger.success("Pesi originali EoMT caricati con successo (Strict=True)!")
+        logger.success("Original EoMT weights loaded successfully (strict=True).")
     except Exception as e:
-        logger.error(f"Errore critico nel caricamento dei pesi: {e}")
-        raise e # Blocca l'esecuzione se i pesi non caricano
+        logger.error(f"Critical error while loading weights: {e}")
+        raise e
         
     return model
 
 def train_epoch(model, dataloader, optimizer, loss_fn, device):
-    """
-    Esegue una singola epoca di fine-tuning OOD sfruttando
-    Bfloat16 per annullare l'Out-Of-Memory ed evitare overflow dei ViT.
-    """
+    """Run one OOD fine-tuning epoch."""
     model.train()
     
     total_ce_loss = 0.0
     total_ood_loss = 0.0
+    is_cuda = device.type == "cuda"
     
     w_ce = cfg.solutions.training.ce_loss_weight
     w_ood = cfg.solutions.training.ood_loss_weight
@@ -103,17 +88,13 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
         
         aug_images, aug_masks, ood_masks = data
         
-        aug_images = aug_images.to(device)
-        aug_masks = aug_masks.to(device)
-        ood_masks = ood_masks.to(device)
+        aug_images = aug_images.to(device, non_blocking=is_cuda)
+        aug_masks = aug_masks.to(device, non_blocking=is_cuda)
+        ood_masks = ood_masks.to(device, non_blocking=is_cuda)
         
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         
-        # ========================================================
-        # 1. FORWARD PASS in BFloat16 (Il FIX per i Vision Transformer)
-        # ========================================================
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            import torch.nn.functional as F
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=is_cuda):
             # LightningModule.forward divides by 255.0; keep model inputs in [0, 255]
             aug_images_for_model = aug_images * 255.0
             mask_logits_list, class_logits_list = model(aug_images_for_model)
@@ -132,22 +113,16 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
                 final_mask_logits, final_class_logits
             )
             
-            # ========================================================
-            # 2. LOSS CALCULATION IN FP32
-            # ========================================================
-            losses = loss_fn(dense_logits, aug_masks, ood_masks)
+            losses = loss_fn(dense_logits.float(), aug_masks, ood_masks)
             
             loss_ce = losses["loss_ce"]
             loss_ood = losses["loss_ood"]
             
             loss = (w_ce * loss_ce) + (w_ood * loss_ood)
         
-        # ========================================================
-        # 3. BACKWARD NATIVO (Senza GradScaler)
-        # ========================================================
         loss.backward()
         
-        # FIX: Clipping dei gradienti per stabilizzare l'attention del ViT
+        # Keep ViT attention updates stable during fine-tuning.
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         
         optimizer.step()
@@ -159,23 +134,26 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
             logger.info(f"Batch {batch_idx}/{len(dataloader)} | CE: {loss_ce.item():.4f} | OOD: {loss_ood.item():.4f}")
             
         del mask_logits_list, class_logits_list, final_mask_logits, final_class_logits, dense_logits, losses, loss, loss_ce, loss_ood
-        torch.cuda.empty_cache()
+        if is_cuda and batch_idx % 50 == 0:
+            torch.cuda.empty_cache()
         
-        # FIX OOM: garbage collection periodico per evitare frammentazione su batch lunghi
         if batch_idx % 200 == 0:
             gc.collect()
+
+    if len(dataloader) == 0:
+        raise RuntimeError("Empty dataloader: check the Cityscapes path and dataset filters.")
 
     avg_ce = total_ce_loss / len(dataloader)
     avg_ood = total_ood_loss / len(dataloader)
     return avg_ce, avg_ood
 
 def run_finetuning():
+    """Run the configured EoMT OOD fine-tuning job."""
     logger.info("[bold magenta]Starting OOD Fine-Tuning Pipeline[/bold magenta]")
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logger.info(f"Device attivo: [bold cyan]{device}[/bold cyan]", extra={"markup": True})
+    logger.info(f"Active device: [bold cyan]{device}[/bold cyan]", extra={"markup": True})
     
-    # --- Checkpoint directory (save & resume) — from config ---
     ckpt_base_dir = os.path.join(cfg.paths.root, cfg.solutions.training.checkpoint_dir)
 
     # resume_from: path to a specific run folder (relative to project root or absolute).
@@ -187,29 +165,29 @@ def run_finetuning():
         if not os.path.isabs(resume_from):
             resume_from = os.path.join(cfg.paths.root, resume_from)
         ckpt_dir = resume_from
-        logger.info(f"[resume_from] Ripresa da run esistente: {ckpt_dir}")
+        logger.info(f"[resume_from] Resuming existing run: {ckpt_dir}")
     else:
         run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         ckpt_dir = os.path.join(ckpt_base_dir, run_timestamp)
-        logger.info(f"Nuova run — checkpoint dir: {ckpt_dir}")
+        logger.info(f"New run checkpoint dir: {ckpt_dir}")
 
     os.makedirs(ckpt_dir, exist_ok=True)
     
-    # --- Base pretrained weights (from config) ---
-    base_ckpt_path = os.path.join(cfg.paths.root, cfg.paths.models.eomt_checkpoint)
+    base_ckpt_path = getattr(cfg.paths.models, "eomt_base_checkpoint", cfg.paths.models.eomt_checkpoint)
     
     model = build_model_eomt(base_ckpt_path, device, num_classes=19, img_size=(1024, 1024))
     
-    # Congela l'Encoder DINOv2 per proteggere le feature stradali da catastrophic forgetting
+    # Freeze DINOv2 features to reduce catastrophic forgetting.
     for param in model.network.encoder.parameters():
         param.requires_grad = False
     
     loss_fn = CombinedFineTuningLoss(
         ood_loss_type=cfg.solutions.training.ood_loss_type, 
-        ignore_index=19
+        ignore_index=cfg.eval.ignore_index,
+        ood_entropy_weight=getattr(cfg.solutions.training, "ood_entropy_weight", 1.0),
+        ood_logit_norm_weight=getattr(cfg.solutions.training, "ood_logit_norm_weight", 0.05),
     ).to(device)
     
-    # Optimizer compatibile con parametri frizzati (lr da config)
     optimizer = optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=cfg.solutions.training.lr,
@@ -222,10 +200,14 @@ def run_finetuning():
     import numpy as np
 
     class PILToLongTensorWrap:
+        """Convert a PIL label image to a long tensor."""
+
         def __call__(self, pic):
             return torch.from_numpy(np.array(pic)).long()
 
     class LocalCityscapesDataset:
+        """Minimal Cityscapes trainId dataset used by the fine-tuning loop."""
+
         def __init__(self, root_dir, subset='train', transform=None, target_transform=None):
             search_pattern = os.path.join(root_dir, "**", subset, "**", "*leftImg8bit.png")
             self.images = sorted(glob.glob(search_pattern, recursive=True))
@@ -250,7 +232,8 @@ def run_finetuning():
                 self.mapping_256[k] = v
             
             if len(self.images) == 0:
-                logger.error(f"Errore fatale: Nessuna immagine trovata con pattern:\n{search_pattern}")
+                logger.error(f"Fatal error: no images found with pattern:\n{search_pattern}")
+                raise RuntimeError(f"No Cityscapes images found: {search_pattern}")
 
         def __len__(self):
             return len(self.images)
@@ -263,7 +246,10 @@ def run_finetuning():
                 img = Image.open(img_path).convert('RGB')
                 label_raw_np = np.array(Image.open(gt_path))
             except OSError as e:
-                logger.warning(f"File corrotto o non leggibile trovato a '{img_path}' o '{gt_path}'. Salto all'indice successivo. Dettaglio: {e}")
+                logger.warning(
+                    f"Unreadable file at '{img_path}' or '{gt_path}'. "
+                    f"Skipping to the next index. Detail: {e}"
+                )
                 return self.__getitem__((idx + 1) % len(self.images))
             
             label_mapped_np = self.mapping_256[label_raw_np]
@@ -285,7 +271,7 @@ def run_finetuning():
                 
             return img, label, img_path, gt_path
 
-    cityscapes_root = os.path.join(cfg.paths.root, "Datasets", "Cityscapes") 
+    cityscapes_root = cfg.paths.datasets.cityscapes
     
     base_dataset = LocalCityscapesDataset(
         root_dir=cityscapes_root,
@@ -305,7 +291,7 @@ def run_finetuning():
     dataset = OutlierAugmentedDataset(
         base_dataset=base_dataset,
         outliers_dir=outliers_dir,
-        ignore_index=19
+        ignore_index=cfg.eval.ignore_index
     )
     
     dataloader = DataLoader(
@@ -313,10 +299,10 @@ def run_finetuning():
         batch_size=cfg.solutions.training.batch_size,
         shuffle=True,
         num_workers=cfg.solutions.training.num_workers,
-        persistent_workers=True,   # FIX: evita corruzione shared-memory tra worker e main process
+        pin_memory=device.type == "cuda",
+        persistent_workers=cfg.solutions.training.num_workers > 0,
     )
     
-    # --- Resume or fresh train ---
     # Priority: resume_from (specific run folder) > fresh start
     import glob as _glob
     start_epoch = 1
@@ -329,14 +315,14 @@ def run_finetuning():
         if existing_ckpts:
             latest_ckpt = existing_ckpts[-1]
             start_epoch = int(os.path.basename(latest_ckpt).split('_')[1]) + 1
-            logger.info(f"[resume_from] Caricamento checkpoint: {latest_ckpt} (prossima epoch: {start_epoch})")
+            logger.info(f"[resume_from] Loading checkpoint: {latest_ckpt} (next epoch: {start_epoch})")
             resume_sd = torch.load(latest_ckpt, map_location=device)
             model.load_state_dict(resume_sd, strict=True)
-            logger.success(f"Checkpoint caricato — ripresa da epoch {start_epoch}")
+            logger.success(f"Checkpoint loaded; resuming from epoch {start_epoch}")
         else:
-            logger.warning(f"[resume_from] Nessun checkpoint trovato in {ckpt_dir} — training da zero.")
+            logger.warning(f"[resume_from] No checkpoint found in {ckpt_dir}; training from scratch.")
     else:
-        logger.info("Training da zero (nuova run).")
+        logger.info("Training from scratch.")
 
     epochs = cfg.solutions.training.epochs
     for epoch in range(start_epoch, epochs + 1):
@@ -349,9 +335,9 @@ def run_finetuning():
         ckpt_path = os.path.join(ckpt_dir, f"epoch_{epoch}_EoMT.pth")
         try:
             torch.save(model.state_dict(), ckpt_path)
-            logger.info(f"Checkpoint salvato: {ckpt_path}")
+            logger.info(f"Checkpoint saved: {ckpt_path}")
         except Exception as e:
-            logger.error(f"Errore salvataggio checkpoint: {e}")
+            logger.error(f"Checkpoint save failed: {e}")
 
 if __name__ == "__main__":
     run_finetuning()

@@ -1,5 +1,5 @@
 """
-eval_objects.py — TASK 2: Analisi per Tipologia di Oggetto
+eval_objects.py — TASK 2: Object-Type Analysis
 ==========================================================
 
 Analyses WHERE the anomaly detection model fails by grouping errors based on:
@@ -26,7 +26,6 @@ import os
 import sys
 import glob
 import argparse
-import textwrap
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -34,7 +33,6 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from sklearn.metrics import average_precision_score
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(os.path.dirname(_SCRIPT_DIR))
@@ -43,6 +41,13 @@ if _ROOT not in sys.path:
 
 from core.utility.logger import logger
 from core.utility.config_loader import cfg
+from core.utility.eval_common import (
+    IGNORE_INDEX,
+    compute_auprc,
+    gt_path_from_image,
+    load_logits,
+    load_ood_mask,
+)
 from core.analysis.plot_utils import (
     apply_style, save_fig, plot_grouped_bar, PALETTE,
 )
@@ -51,9 +56,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-IGNORE_INDEX = cfg.eval.ignore_index
-
-# Cityscapes Classes (19 eval classes)
+# Cityscapes classes used for prediction summaries.
 CS_CLASSES = [
     "road", "sidewalk", "building", "wall", "fence", "pole", "traffic light",
     "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car",
@@ -69,59 +72,15 @@ CS_STUFF = {
     "road", "sidewalk", "building", "wall", "fence", "vegetation", "terrain", "sky"
 }
 
-# Ensure coverage
 assert len(CS_THINGS) + len(CS_STUFF) == len(CS_CLASSES)
 
-def compute_auprc(scores: np.ndarray, labels: np.ndarray) -> float:
-    valid = labels != IGNORE_INDEX
-    scores = scores[valid]
-    labels = labels[valid]
-    if len(np.unique(labels)) < 2:
-        return float("nan")
-    return average_precision_score(labels, scores) * 100.0
-
-def load_logits(logit_path: str) -> torch.Tensor:
-    t = torch.load(logit_path, map_location="cpu")
-    if t.dim() == 3:
-        t = t.unsqueeze(0)
-    return t.float()
-
-def load_gt_mask(gt_path: str, target_size: Tuple[int, int], dataset_type: str) -> np.ndarray:
-    mask = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
-    if mask is None:
-        raise FileNotFoundError(f"GT mask not found: {gt_path}")
-    mask = cv2.resize(mask, (target_size[1], target_size[0]), interpolation=cv2.INTER_NEAREST)
-    if dataset_type == "road_anomaly":
-        mask = np.where(mask == 2, 1, mask).astype(np.uint8)
-    elif dataset_type == "streethazard":
-        out = np.full_like(mask, IGNORE_INDEX)
-        out[mask < 20] = 0
-        out[mask >= 20] = 1
-        out[mask == 14] = IGNORE_INDEX
-        mask = out
-    # Final safety remap: some datasets use 255 for ignore, but we want to stick to config's ignore_index
-    if IGNORE_INDEX != 255:
-        mask[mask == 255] = IGNORE_INDEX
-
-    return mask.astype(np.uint8)
-
-def gt_path_from_image(image_path: str, dataset_type: str) -> str:
-    gt = image_path.replace("images", "labels_masks")
-    if dataset_type == "road_obstacle21":
-        gt = gt.replace(".webp", ".png")
-    elif dataset_type == "fs_static":
-        gt = gt.replace(".jpg", ".png")
-    elif dataset_type in ("road_anomaly", "road_anomaly21"):
-        gt = gt.replace(".jpg", ".png")
-    return gt
-
 def compute_all_scores(logits: torch.Tensor) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    """Compute anomaly score maps and semantic predictions from logits."""
     probs = F.softmax(logits, dim=1)
     msp = 1.0 - probs.max(dim=1).values
     maxlogit = -logits.max(dim=1).values
     entropy = -(probs * torch.log(probs + 1e-12)).sum(dim=1)
     
-    # Argmax for class prediction
     preds = logits.argmax(dim=1).squeeze(0).numpy()
 
     scores = {
@@ -132,6 +91,8 @@ def compute_all_scores(logits: torch.Tensor) -> Tuple[Dict[str, np.ndarray], np.
     return scores, preds
 
 class ObjectAnalyser:
+    """Analyse OOD detection behavior by object size and predicted class."""
+
     METHODS = ["msp", "maxlogit", "maxentropy"]
 
     def __init__(
@@ -154,23 +115,19 @@ class ObjectAnalyser:
         self.thresh_medium = thresh_medium or cfg.analysis.thresh_medium
         self.out_dir = out_dir or os.path.join(cfg.paths.root, cfg.analysis.reports_dir, "objects")
         
-        # Sizing accumulators
         self._size_acc: Dict[str, Dict[str, Dict[str, List]]] = {
             "Small": {m: {"scores": [], "labels": []} for m in self.METHODS},
             "Medium": {m: {"scores": [], "labels": []} for m in self.METHODS},
             "Large": {m: {"scores": [], "labels": []} for m in self.METHODS},
         }
 
-        # Baseline In-distribution vs All OOD (for comparison)
         self._baseline_acc: Dict[str, Dict[str, List]] = {m: {"scores": [], "labels": []} for m in self.METHODS}
 
-        # Confusion accumulators over all OOD pixels (not just FN logically, but FN implies they have an argmax)
-        # Actually, let's collect the class predictions for all OOD pixels. 
-        # But specifically, we are interested in "false negatives" where anomaly score < threshold.
-        # Without a fixed threshold, we can just look at *all* OOD pixels and see what the model classifies them as.
+        # Without a fixed threshold, inspect predictions over all OOD pixels.
         self._ood_class_counts = np.zeros(len(CS_CLASSES), dtype=np.int64)
 
     def run(self):
+        """Process the configured dataset and write object-level reports."""
         if not os.path.isdir(self.logits_dir):
             logger.error(f"Logits directory not found: {self.logits_dir}")
             return
@@ -199,24 +156,20 @@ class ObjectAnalyser:
     def _process_image(self, logit_path: str, gt_path: str):
         logits = load_logits(logit_path)
         H, W = logits.shape[2], logits.shape[3]
-        gt_mask = load_gt_mask(gt_path, (H, W), self.dataset_type)
+        gt_mask = load_ood_mask(gt_path, (H, W), self.dataset_type)
 
         if 1 not in np.unique(gt_mask):
             return
 
         scores_dict, preds = compute_all_scores(logits)
 
-        # Baseline
         for method in self.METHODS:
             self._baseline_acc[method]["scores"].append(scores_dict[method].flatten())
             self._baseline_acc[method]["labels"].append(gt_mask.flatten())
 
-        # Connected components on OOD (gt == 1)
-        # Binary mask for components
         bin_ood = (gt_mask == 1).astype(np.uint8)
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(bin_ood, connectivity=8)
 
-        # Build masks for sizes
         small_mask = np.zeros_like(gt_mask, dtype=bool)
         med_mask = np.zeros_like(gt_mask, dtype=bool)
         large_mask = np.zeros_like(gt_mask, dtype=bool)
@@ -231,13 +184,11 @@ class ObjectAnalyser:
             else:
                 large_mask |= comp_mask
 
-        # Accumulate component metrics
-        # For evaluation, we evaluate the component positive pixels mixed with ALL negative pixels.
-        # This properly evaluates metrics "detecting small objects vs detecting large ones".
-        # To do this, we need the in-distribution pixel indices.
+        # Compare each size bucket against all in-distribution pixels.
         ind_mask = (gt_mask == 0)
         
         def push_acc(bucket_name, bucket_mask):
+            """Append score/label pixels for one size bucket."""
             mask = bucket_mask | ind_mask
             filtered_gt = gt_mask[mask]
             for method in self.METHODS:
@@ -249,7 +200,6 @@ class ObjectAnalyser:
         push_acc("Medium", med_mask)
         push_acc("Large", large_mask)
 
-        # Confusion: aggregate predictions for OOD pixels
         ood_preds = preds[bin_ood == 1]
         for p in ood_preds:
             if 0 <= p < len(CS_CLASSES):
@@ -277,7 +227,6 @@ class ObjectAnalyser:
             for m in self.METHODS:
                 lines.append(f"  {m:10}: {size_metrics[bucket][m]:.2f}%")
 
-        # Confusion
         lines.append("\nClass Prediction on OOD Pixels:")
         total_ood = self._ood_class_counts.sum()
         if total_ood > 0:
@@ -293,7 +242,6 @@ class ObjectAnalyser:
         apply_style()
         dataset_tag = f"{self.dataset_type}_{self.model_name}"
 
-        # 1. Grouped Bar for sizes
         auprc_data = {
             "Small": size_metrics["Small"],
             "Medium":  size_metrics["Medium"],
@@ -307,12 +255,10 @@ class ObjectAnalyser:
             filename=f"size_auprc_{dataset_tag}"
         )
 
-        # 2. Confusion Bar Chart
         if self._ood_class_counts.sum() > 0:
             fig, ax = plt.subplots(figsize=(10, 6))
             pcts = self._ood_class_counts / self._ood_class_counts.sum() * 100
             
-            # Sort by pct
             idx = np.argsort(pcts)
             
             classes = [CS_CLASSES[i] for i in idx if pcts[i] > 0.5]
@@ -329,7 +275,6 @@ class ObjectAnalyser:
             fig.tight_layout()
             save_fig(fig, self.out_dir, f"confusion_bar_{dataset_tag}")
 
-        # 3. Things vs Stuff Pie or Bar
         things_cnt = sum(self._ood_class_counts[CS_CLASSES.index(c)] for c in CS_THINGS)
         stuff_cnt = sum(self._ood_class_counts[CS_CLASSES.index(c)] for c in CS_STUFF)
         tot = things_cnt + stuff_cnt
@@ -344,6 +289,7 @@ class ObjectAnalyser:
 
 
 def parse_args():
+    """Parse command-line arguments for object analysis."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--logits_dir", required=True)
     parser.add_argument("--images_glob", required=True)
@@ -353,6 +299,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    """Run object-level OOD analysis from CLI arguments."""
     args = parse_args()
     analyser = ObjectAnalyser(
         logits_dir=args.logits_dir,
