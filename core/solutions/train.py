@@ -74,16 +74,20 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
         
     return model
 
-def train_epoch(model, dataloader, optimizer, loss_fn, device):
+def train_epoch(model, dataloader, optimizer, loss_fn, device, epoch: int):
     """Run one OOD fine-tuning epoch."""
     model.train()
     
     total_ce_loss = 0.0
     total_ood_loss = 0.0
+    total_ood_ratio = 0.0
+    batches_with_ood = 0
     is_cuda = device.type == "cuda"
     
     w_ce = cfg.solutions.training.ce_loss_weight
-    w_ood = cfg.solutions.training.ood_loss_weight
+    target_w_ood = cfg.solutions.training.ood_loss_weight
+    warmup_epochs = max(1, getattr(cfg.solutions.training, "ood_loss_warmup_epochs", 1))
+    w_ood = target_w_ood * min(1.0, epoch / warmup_epochs)
 
     for batch_idx, data in enumerate(dataloader):
         
@@ -92,6 +96,10 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
         aug_images = aug_images.to(device, non_blocking=is_cuda)
         aug_masks = aug_masks.to(device, non_blocking=is_cuda)
         ood_masks = ood_masks.to(device, non_blocking=is_cuda)
+        ood_ratio = ood_masks.float().mean().item()
+        total_ood_ratio += ood_ratio
+        if ood_masks.any():
+            batches_with_ood += 1
         
         optimizer.zero_grad(set_to_none=True)
         
@@ -131,7 +139,11 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
         total_ood_loss += loss_ood.item()
 
         if batch_idx % 10 == 0:
-            logger.info(f"Batch {batch_idx}/{len(dataloader)} | CE: {loss_ce.item():.4f} | OOD: {loss_ood.item():.4f}")
+            logger.info(
+                f"Batch {batch_idx}/{len(dataloader)} | CE: {loss_ce.item():.4f} | "
+                f"OOD: {loss_ood.item():.4f} | w_ood: {w_ood:.4f} | "
+                f"OOD px: {ood_ratio * 100:.3f}%"
+            )
             
         del mask_logits_list, class_logits_list, final_mask_logits, final_class_logits, dense_logits, losses, loss, loss_ce, loss_ood
         if is_cuda and batch_idx % 50 == 0:
@@ -145,7 +157,9 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device):
 
     avg_ce = total_ce_loss / len(dataloader)
     avg_ood = total_ood_loss / len(dataloader)
-    return avg_ce, avg_ood
+    avg_ood_ratio = total_ood_ratio / len(dataloader)
+    ood_batch_rate = batches_with_ood / len(dataloader)
+    return avg_ce, avg_ood, avg_ood_ratio, ood_batch_rate
 
 def run_finetuning():
     """Run the configured EoMT OOD fine-tuning job."""
@@ -180,6 +194,9 @@ def run_finetuning():
     # Freeze DINOv2 features to reduce catastrophic forgetting.
     for param in model.network.encoder.parameters():
         param.requires_grad = False
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    logger.info(f"Trainable parameters: {trainable_params:,} / {total_params:,}")
     
     loss_fn = CombinedFineTuningLoss(
         ood_loss_type=cfg.solutions.training.ood_loss_type, 
@@ -328,9 +345,12 @@ def run_finetuning():
     for epoch in range(start_epoch, epochs + 1):
         logger.info(f"\n[bold green]=== Start Epoch {epoch}/{epochs} ===[/bold green]")
         
-        avg_ce, avg_ood = train_epoch(model, dataloader, optimizer, loss_fn, device)
+        avg_ce, avg_ood, avg_ood_ratio, ood_batch_rate = train_epoch(model, dataloader, optimizer, loss_fn, device, epoch)
         
-        logger.success(f"End Epoch {epoch} | Avg CE Loss: {avg_ce:.4f} | Avg OOD Loss: {avg_ood:.4f}")
+        logger.success(
+            f"End Epoch {epoch} | Avg CE Loss: {avg_ce:.4f} | Avg OOD Loss: {avg_ood:.4f} | "
+            f"Avg OOD px: {avg_ood_ratio * 100:.3f}% | OOD batches: {ood_batch_rate * 100:.1f}%"
+        )
         
         ckpt_path = os.path.join(ckpt_dir, f"epoch_{epoch}_EoMT.pth")
         try:

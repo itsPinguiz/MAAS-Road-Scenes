@@ -83,6 +83,7 @@ def build_stages(root_dir: str) -> list[PipelineStage]:
     evaluation_dir = os.path.join(root_dir, "core", "evaluation")
     run_erfnet = getattr(cfg.pipeline, "run_erfnet", True)
     run_eomt = getattr(cfg.pipeline, "run_eomt", True)
+    save_logits_args = ["--save_logits"] if getattr(cfg.eval, "save_logits", False) else []
 
     return [
         PipelineStage(
@@ -90,7 +91,7 @@ def build_stages(root_dir: str) -> list[PipelineStage]:
             venv_python=cfg.paths.venvs.eval_python,
             script_name="eval_iou.py",
             working_dir=eval_dir,
-            args=["--save_logits"],
+            args=save_logits_args,
             enabled=run_erfnet,
         ),
         PipelineStage(
@@ -106,7 +107,7 @@ def build_stages(root_dir: str) -> list[PipelineStage]:
             venv_python=cfg.paths.venvs.eomt_python,
             script_name="eval_miou_eomt.py",
             working_dir=eomt_dir,
-            args=["--save_logits"],
+            args=save_logits_args,
             enabled=run_eomt,
         ),
         PipelineStage(

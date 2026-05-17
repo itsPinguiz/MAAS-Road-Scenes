@@ -56,9 +56,10 @@ def main():
                 "--dataset_name", dataset_name,
                 "--device", str(DEVICE),
                 "--quiet",
-                "--save_logits",
                 "--ckpt_path", cfg.paths.models.eomt_checkpoint,
             ]
+            if getattr(cfg.eval, "save_logits", False):
+                cmd.append("--save_logits")
 
             result = subprocess.run(cmd, capture_output=True, text=True)
 

@@ -19,6 +19,8 @@ class PerspectiveOutlierPasting:
         self.perspective_strength = self.config.perspective_strength
         self.boundary_rate = self.config.boundary_rate
         self.boundary_classes = self.config.boundary_classes
+        self.road_rate = getattr(self.config, 'road_rate', 0.0)
+        self.road_class_id = getattr(self.config, 'road_class_id', 0)
         self.alpha = self.config.alpha
         self.edge_feathering = getattr(self.config, 'edge_feathering', False)
         self.noise_std = getattr(self.config, 'noise_std', 0.05)
@@ -58,6 +60,19 @@ class PerspectiveOutlierPasting:
         
         return None
 
+    def find_class_coordinates(self, gt_mask: np.ndarray, class_id: int) -> Optional[Tuple[int, int]]:
+        """Pick a random pixel from one semantic class, preferring lower-image road regions."""
+        class_pixels = np.argwhere(gt_mask == class_id)
+        if len(class_pixels) == 0:
+            return None
+
+        height = gt_mask.shape[0]
+        lower_pixels = class_pixels[class_pixels[:, 0] >= int(height * 0.35)]
+        candidates = lower_pixels if len(lower_pixels) > 0 else class_pixels
+        idx = random.randint(0, len(candidates) - 1)
+        y, x = candidates[idx]
+        return int(x), int(y)
+
     def __call__(self, image: torch.Tensor, mask: torch.Tensor, outlier_img: torch.Tensor, outlier_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Apply outlier pasting.
@@ -72,12 +87,15 @@ class PerspectiveOutlierPasting:
         C, H, W = image.shape
         _, H_o, W_o = outlier_img.shape
         
+        gt_numpy = mask.detach().cpu().numpy()
         use_boundary = (random.random() < self.boundary_rate)
         center_coords = None
         
         if use_boundary:
-            gt_numpy = mask.detach().cpu().numpy()
             center_coords = self.find_boundary_coordinates(gt_numpy)
+
+        if center_coords is None and random.random() < self.road_rate:
+            center_coords = self.find_class_coordinates(gt_numpy, self.road_class_id)
             
         if center_coords is None:
             # Road pixels are usually in the lower half of Cityscapes-like frames.

@@ -30,6 +30,7 @@ DATASETS = {
 }
 
 METHODS = ("msp", "maxlogit", "maxentropy", "rba")
+METRIC_VALUE_RE = r"(?:nan|[+-]?inf|[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:e[+-]?[0-9]+)?)"
 
 
 @dataclass
@@ -44,12 +45,12 @@ class CheckpointResult:
 
     @property
     def mean_auprc(self) -> float:
-        values = [v[0] for v in self.metrics.values()]
+        values = [v[0] if math.isfinite(v[0]) else 0.0 for v in self.metrics.values()]
         return sum(values) / len(values) if values else float("nan")
 
     @property
     def mean_fpr95(self) -> float:
-        values = [v[1] for v in self.metrics.values()]
+        values = [v[1] if math.isfinite(v[1]) else 100.0 for v in self.metrics.values()]
         return sum(values) / len(values) if values else float("nan")
 
 
@@ -66,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-epochs", type=int, default=None, help="Evaluate only the first N checkpoints")
     parser.add_argument("--miou-baseline", type=float, default=None, help="Reference mIoU for penalty, e.g. original model mIoU")
     parser.add_argument("--miou-penalty", type=float, default=2.0, help="Penalty multiplier for mIoU drop below baseline")
-    parser.add_argument("--fpr-weight", type=float, default=0.25, help="Penalty multiplier for mean FPR95")
+    parser.add_argument("--fpr-weight", type=float, default=1.0, help="Penalty multiplier for mean FPR95")
     parser.add_argument("--output-dir", default=None, help="Defaults to results/checkpoint_selection/<run_dir_name>")
     return parser.parse_args()
 
@@ -118,7 +119,7 @@ def evaluate_miou(args: argparse.Namespace, ckpt: Path) -> float:
         str(args.crop_batch_size),
     ]
     output = run_command(command, cwd=eomt_dir)
-    match = re.search(r"mIoU:\s*([0-9.]+)%", output)
+    match = re.search(rf"mIoU:\s*({METRIC_VALUE_RE})%", output, flags=re.IGNORECASE)
     if not match:
         raise RuntimeError(f"Could not parse mIoU from output for {ckpt}:\n{output}")
     return float(match.group(1))
@@ -146,13 +147,21 @@ def evaluate_ood(args: argparse.Namespace, ckpt: Path, dataset_name: str) -> dic
     ]
     output = run_command(command, cwd=eomt_dir)
     parsed: dict[str, tuple[float, float]] = {}
-    pattern = re.compile(r"Method:\s*([^,]+),\s*AuPRC:\s*([0-9.]+),\s*FPR95:\s*([0-9.]+)")
+    pattern = re.compile(
+        rf"Method:\s*([^,]+),\s*AuPRC:\s*({METRIC_VALUE_RE}),\s*FPR95:\s*({METRIC_VALUE_RE})",
+        flags=re.IGNORECASE,
+    )
     for match in pattern.finditer(output):
         method = match.group(1).strip().lower().replace(" ", "")
         parsed[method] = (float(match.group(2)), float(match.group(3)))
     missing = [method for method in args.methods if method not in parsed]
     if missing:
-        raise RuntimeError(f"Missing metrics for {missing} on {dataset_name} / {ckpt}")
+        logger.warning(
+            f"Missing metrics for {missing} on {dataset_name} / {ckpt}; "
+            "using AuPRC=nan, FPR95=100.0 for ranking."
+        )
+        for method in missing:
+            parsed[method] = (float("nan"), 100.0)
     return parsed
 
 
@@ -244,8 +253,8 @@ def main() -> None:
             f"mean AuPRC={result.mean_auprc:.2f}, mean FPR95={result.mean_fpr95:.2f}"
         )
         results.append(result)
+        write_reports(results, output_dir, args)
 
-    write_reports(results, output_dir, args)
     best = max(results, key=lambda r: r.score if r.score is not None else -math.inf)
     logger.success(f"Best checkpoint: epoch {best.epoch} | score={best.score:.2f} | {best.checkpoint}")
 

@@ -25,8 +25,8 @@ paths:
     trained_models_dir: "checkpoints"
     erfnet_weights:     "checkpoints/erfnet_pretrained.pth"
     erfnet_model:       "third_party/eval/erfnet.py"
-    eomt_base_checkpoint: "checkpoints/epoch_106-step_19902_eomt.ckpt"
-    eomt_checkpoint:    "checkpoints/solutions/20260514_153930/epoch_20_EoMT.pth"
+    eomt_base_checkpoint: "checkpoints/eomt_cityscapes.bin"
+    eomt_checkpoint:    "checkpoints/solutions/20260516_130935/epoch_3_EoMT.pth"
 
   logits:
     erfnet: "core/evaluation/eval/saved_logits/erfnet"
@@ -47,6 +47,7 @@ eval:
   temperatures: [0.5, 0.75, 1.1]
   num_classes: 20
   ignore_index: 19
+  save_logits: false
 # =============================================================================
 # Analysis parameters
 # =============================================================================
@@ -79,12 +80,14 @@ analysis:
 # =============================================================================
 solutions:
   augmentation:
-    p_apply: 0.7               # Probabilità di applicare l'outlier pasting (70%)
-    p_small: 0.75              # Bimodal Scale: favorisce ostacoli piccoli su strada
-    small_scale_range: [0.0005, 0.01] # Oggetti piccoli tipo detriti/bottiglie/sacchetti
-    large_scale_range: [0.03, 0.20]   # Limita i casi enormi per non sovra-specializzare
+    p_apply: 0.25              # Gentile: evita di trasformare ogni batch in dominio sintetico
+    p_small: 0.85              # Favorisce ostacoli piccoli su strada
+    small_scale_range: [0.0005, 0.008] # Oggetti piccoli tipo detriti/bottiglie/sacchetti
+    large_scale_range: [0.02, 0.08]    # Limita i casi enormi per non sovra-specializzare
     perspective_strength: 1.0  # Moltiplicatore Y-based (1 = attenua molto in lontananza)
-    boundary_rate: 0.10        # Meno boundary bias: più anomalie su road/flat pixels
+    boundary_rate: 0.0         # No boundary bias: prima proviamo anomalie su road/flat pixels
+    road_rate: 0.9             # % dei paste non-boundary centrati su pixel road
+    road_class_id: 0           # Cityscapes trainId road
     # Classi Cityscapes critiche: building(2), wall(3), fence(4), pole(5), vegetation(8), terrain(9)
     # L'ID Mapped di Cityscapes (trainId) è diverso:
     # 2 (building)->2, 3 (wall)->3, 4 (fence)->4, 5 (pole)->5, 8 (vegetation)->8, 9 (terrain)->9
@@ -97,14 +100,15 @@ solutions:
     resume_from: null           # null: fresh run (new timestamped folder) | path: resume from that specific run folder
                                 # Accepts relative (to project root) or absolute paths.
                                 # Example: "checkpoints/solutions/20260504_014500"
-    epochs: 20
-    lr: 0.0001
+    epochs: 5
+    lr: 0.00001
     batch_size: 1
     num_workers: 4
     ood_loss_type: "entropy_logit_norm"  # varianti: max_entropy, entropy_logit_norm, energy, logit_norm
     ood_entropy_weight: 1.0
-    ood_logit_norm_weight: 0.05
-    ood_loss_weight: 1.0
+    ood_logit_norm_weight: 0.01
+    ood_loss_weight: 0.05
+    ood_loss_warmup_epochs: 3
     ce_loss_weight: 2.0          # alzato da 1.0 → 2.0 per compensare il calo di mIoU
     results_dir:    "results/solutions"      # log e output vari
     checkpoint_dir: "checkpoints/solutions"  # salvataggio e caricamento checkpoint fine-tuned

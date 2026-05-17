@@ -54,10 +54,11 @@ def main():
                 sys.executable, "evalAnomaly.py",
                 "--input", dataset_path,
                 "--quiet",
-                "--save_logits",
                 "--dataset_name", dataset_name,
                 "--loadWeights", cfg.paths.models.erfnet_weights,
             ]
+            if getattr(cfg.eval, "save_logits", False):
+                cmd.append("--save_logits")
 
             result = subprocess.run(cmd, capture_output=True, text=True)
 
