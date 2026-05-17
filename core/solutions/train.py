@@ -121,15 +121,15 @@ def train_epoch(model, dataloader, optimizer, loss_fn, device, epoch: int):
             final_mask_logits = mask_logits_list[-1]
             final_class_logits = class_logits_list[-1]
 
-            dense_logits_low_res = model.to_per_pixel_logits_semantic(
-                final_mask_logits, final_class_logits
-            )
-            
-            dense_logits = F.interpolate(
-                dense_logits_low_res.float(), 
+            final_mask_logits = F.interpolate(
+                final_mask_logits.float(),
                 size=(aug_images.shape[2], aug_images.shape[3]), 
                 mode="bilinear", 
                 align_corners=False
+            )
+
+            dense_logits = model.to_per_pixel_logits_semantic(
+                final_mask_logits, final_class_logits
             )
             
             losses = loss_fn(dense_logits, aug_masks, ood_masks)
