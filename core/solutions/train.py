@@ -1,6 +1,7 @@
 import os
 import sys
 import gc
+import time
 from datetime import datetime
 
 # Reduce CUDA memory fragmentation on long runs.
@@ -33,13 +34,19 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
     from models.eomt import EoMT
     from training.mask_classification_semantic import MaskClassificationSemantic
 
+    start = time.perf_counter()
+    logger.info("Creating DINOv2 ViT encoder with pretrained=False; weights will come from the EoMT checkpoint.")
     encoder = ViT(
         img_size=img_size, 
         patch_size=16, 
         backbone_name="vit_base_patch14_reg4_dinov2",
         ckpt_path=checkpoint_path,
+        pretrained=False,
     )
+    logger.info(f"ViT encoder created in {time.perf_counter() - start:.2f}s")
 
+    start = time.perf_counter()
+    logger.info("Creating EoMT decoder/network...")
     network = EoMT(
         num_q=100,
         encoder=encoder,
@@ -47,13 +54,17 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
         masked_attn_enabled=True,
         num_classes=num_classes,
     )
+    logger.info(f"EoMT network created in {time.perf_counter() - start:.2f}s")
 
+    start = time.perf_counter()
+    logger.info("Wrapping network in MaskClassificationSemantic...")
     model = MaskClassificationSemantic(
         img_size=img_size,
         num_classes=num_classes,
         network=network,
         attn_mask_annealing_enabled=True,
     ).to(device)
+    logger.info(f"Model wrapper moved to {device} in {time.perf_counter() - start:.2f}s")
 
     logger.info(f"Loading pretrained weights from: {checkpoint_path}")
     

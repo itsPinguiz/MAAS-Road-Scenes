@@ -102,8 +102,8 @@ solutions:
                                 # Example: "checkpoints/solutions/20260504_014500"
     epochs: 5
     lr: 0.00001
-    batch_size: 1
-    num_workers: 4
+    batch_size: 4
+    num_workers: 8
     ood_loss_type: "entropy_logit_norm"  # varianti: max_entropy, entropy_logit_norm, energy, logit_norm
     ood_entropy_weight: 1.0
     ood_logit_norm_weight: 0.01

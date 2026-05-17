@@ -19,8 +19,11 @@ class ViT(nn.Module):
         patch_size=16,
         backbone_name="vit_large_patch14_reg4_dinov2",
         ckpt_path: Optional[str] = None,
+        pretrained: Optional[bool] = None,
     ):
         super().__init__()
+        if pretrained is None:
+            pretrained = ckpt_path is None
 
         if "/" in backbone_name:
             self.backbone = self.transformers_to_timm(
@@ -32,7 +35,7 @@ class ViT(nn.Module):
         else:
             self.backbone = timm.create_model(
                 backbone_name,
-                pretrained=ckpt_path is None,
+                pretrained=pretrained,
                 img_size=img_size,
                 patch_size=patch_size,
                 num_classes=0,
