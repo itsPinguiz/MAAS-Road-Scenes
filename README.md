@@ -172,8 +172,8 @@ core/evaluation/eomt/.venv_eomt/bin/python core/analysis/eval_resolution_attenti
 ## Fine-Tuning Workflow
 
 The `core/solutions` package contains the current mitigation experiments:
-COCO outlier extraction, EoMT fine-tuning with pasted OOD objects, and checkpoint
-ranking.
+COCO outlier extraction, EoMT fine-tuning with pasted OOD objects, RbA-style
+outlier supervision, and checkpoint ranking.
 
 Prepare transparent COCO cutouts:
 
@@ -189,6 +189,10 @@ Run the configured EoMT fine-tuning job:
 ```bash
 core/evaluation/eomt/.venv_eomt/bin/python core/solutions/train.py
 ```
+
+The default solution config follows the RbA outlier-exposure setup: sparse COCO
+cut-paste outliers, a squared hinge loss on pasted OOD pixels, and a lightweight
+`rba_heads` fine-tuning scope that updates only the mask MLP and class head.
 
 Rank checkpoints from a run:
 

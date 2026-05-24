@@ -85,6 +85,33 @@ def build_model_eomt(checkpoint_path, device, num_classes=19, img_size=(1024, 10
         
     return model
 
+def set_trainable_scope(model, scope: str) -> None:
+    """Select which EoMT parameters are updated during fine-tuning."""
+    scope = (scope or "decoder").lower()
+
+    for param in model.parameters():
+        param.requires_grad = False
+
+    if scope == "rba_heads":
+        modules = [model.network.mask_head, model.network.class_head]
+    elif scope == "rba_heads_queries":
+        modules = [model.network.mask_head, model.network.class_head, model.network.q]
+    elif scope == "decoder":
+        modules = [model.network.q, model.network.class_head, model.network.mask_head, model.network.upscale]
+    elif scope == "all":
+        for param in model.parameters():
+            param.requires_grad = True
+        return
+    else:
+        raise ValueError(
+            f"Unsupported trainable_scope: {scope}. "
+            "Use one of: rba_heads, rba_heads_queries, decoder, all."
+        )
+
+    for module in modules:
+        for param in module.parameters():
+            param.requires_grad = True
+
 def train_epoch(model, dataloader, optimizer, loss_fn, device, epoch: int):
     """Run one OOD fine-tuning epoch."""
     model.train()
@@ -202,11 +229,11 @@ def run_finetuning():
     
     model = build_model_eomt(base_ckpt_path, device, num_classes=19, img_size=(1024, 1024))
     
-    # Freeze DINOv2 features to reduce catastrophic forgetting.
-    for param in model.network.encoder.parameters():
-        param.requires_grad = False
+    trainable_scope = getattr(cfg.solutions.training, "trainable_scope", "decoder")
+    set_trainable_scope(model, trainable_scope)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
+    logger.info(f"Trainable scope: {trainable_scope}")
     logger.info(f"Trainable parameters: {trainable_params:,} / {total_params:,}")
     
     loss_fn = CombinedFineTuningLoss(
@@ -214,6 +241,7 @@ def run_finetuning():
         ignore_index=cfg.eval.ignore_index,
         ood_entropy_weight=getattr(cfg.solutions.training, "ood_entropy_weight", 1.0),
         ood_logit_norm_weight=getattr(cfg.solutions.training, "ood_logit_norm_weight", 0.05),
+        rba_margin=getattr(cfg.solutions.training, "rba_margin", 5.0),
     ).to(device)
     
     optimizer = optim.AdamW(

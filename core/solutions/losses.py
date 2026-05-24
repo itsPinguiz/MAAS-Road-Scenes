@@ -60,6 +60,22 @@ class EntropyLogitNormOODLoss(nn.Module):
         )
 
 
+class RbAHingeOODLoss(nn.Module):
+    """Squared hinge loss that pushes pasted outliers to be rejected by all classes."""
+    def __init__(self, alpha: float = 5.0):
+        super().__init__()
+        self.alpha = alpha
+
+    def forward(self, logits: torch.Tensor, ood_mask: torch.Tensor) -> torch.Tensor:
+        """Penalize positive known-class acceptance on pasted OOD pixels."""
+        if not ood_mask.any():
+            return logits.sum() * 0.0
+
+        ood_logits = logits.permute(0, 2, 3, 1)[ood_mask]
+        known_acceptance = torch.tanh(ood_logits).sum(dim=1)
+        return F.relu(self.alpha + known_acceptance).pow(2).mean()
+
+
 class CombinedFineTuningLoss(nn.Module):
     """Combine semantic CE on clean pixels with OOD loss on pasted pixels."""
     def __init__(
@@ -68,6 +84,7 @@ class CombinedFineTuningLoss(nn.Module):
         ignore_index: int = 255,
         ood_entropy_weight: float = 1.0,
         ood_logit_norm_weight: float = 0.05,
+        rba_margin: float = 5.0,
     ):
         super().__init__()
         self.ce_loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
@@ -81,6 +98,8 @@ class CombinedFineTuningLoss(nn.Module):
             )
         elif ood_loss_type in {"logit_norm", "energy"}:
             self.ood_loss_fn = LogitNormOODLoss()
+        elif ood_loss_type in {"rba_hinge", "rba"}:
+            self.ood_loss_fn = RbAHingeOODLoss(alpha=rba_margin)
         else:
             raise ValueError(f"Unsupported OOD loss type: {ood_loss_type}")
 
