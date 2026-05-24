@@ -5,17 +5,17 @@
   REGION ANALYSIS
   Method          Region          AuPRC %    FPR95 %
   --------------------------------------------------
-  MSP             boundary          88.34      59.11
-                  flat              18.70      22.32
-  MAXLOGIT        boundary          88.28      59.11
-                  flat              18.60      22.92
-  MAXENTROPY      boundary          88.09      58.76
-                  flat              20.57      24.22
+  MSP             boundary          88.91      60.44
+                  flat              23.36      19.42
+  MAXLOGIT        boundary          88.87      59.82
+                  flat              23.27      19.73
+  MAXENTROPY      boundary          88.76      59.79
+                  flat              25.18      20.33
 
   DEPTH BAND ANALYSIS (AuPRC %)
   Method                Far (B0)   Mid-far (B1)   Mid-far (B2)  Mid-near (B3)      Near (B4)
   ------------------------------------------------------------------------------------------
-  MSP                        nan            nan          49.18          52.90          15.89
-  MAXLOGIT                   nan            nan          48.88          52.66          15.82
-  MAXENTROPY                 nan            nan          45.71          52.49          15.81
+  MSP                        nan            nan          54.10          65.69          15.58
+  MAXLOGIT                   nan            nan          53.71          65.53          15.50
+  MAXENTROPY                 nan            nan          50.63          66.39          15.54
 ======================================================================

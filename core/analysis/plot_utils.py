@@ -4,7 +4,7 @@ plot_utils.py
 Shared plotting utilities for all fine-grained analysis scripts.
 
 Provides:
-- A consistent, publication-ready matplotlib style (dark background, custom palette).
+- A consistent, publication-ready matplotlib style (blue palette on white background).
 - Helper functions to save figures with tight layout and proper DPI.
 - A set of reusable plot builders (grouped bar, heatmap, scatter).
 
@@ -18,23 +18,25 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from cycler import cycler
 import seaborn as sns
 from typing import Dict, List, Optional, Tuple
 
 from core.utility.config_loader import cfg
 
 PALETTE = {
-    "msp":        "#4E79A7",   # Blue
-    "maxlogit":   "#F28E2B",   # Orange
-    "maxentropy": "#59A14F",   # Green
-    "rba":        "#E15759",   # Red
-    "boundary":   "#B07AA1",   # Purple
-    "flat":       "#76B7B2",   # Teal
-    "accent":     "#FF6B6B",
-    "bg":         "#1A1A2E",   # Deep navy background
-    "surface":    "#16213E",
-    "text":       "#E0E0E0",
-    "grid":       "#2D2D4E",
+    "msp":        "#1F77B4",   # Matplotlib default blue
+    "maxlogit":   "#4C9ED9",
+    "maxentropy": "#8EC7F0",
+    "rba":        "#0B4F8A",
+    "boundary":   "#2A6FBB",
+    "flat":       "#9BCBEA",
+    "accent":     "#1F77B4",
+    "bg":         "#FFFFFF",
+    "surface":    "#FFFFFF",
+    "text":       "#1F2937",
+    "grid":       "#D7E3F3",
+    "spine":      "#B7CBE4",
 }
 
 METHOD_LABELS: Dict[str, str] = {
@@ -50,9 +52,11 @@ DEFAULT_DPI     = cfg.analysis.plotting.dpi
 
 def apply_style() -> None:
     """
-    Apply a consistent dark, publication-ready style to all subsequent plots.
+    Apply a consistent blue-on-white, publication-ready style to all subsequent plots.
     Should be called once at the top of every analysis script.
     """
+    plt.style.use("default")
+    sns.set_theme(style="whitegrid", palette="Blues")
     plt.rcParams.update({
         "font.family":          "DejaVu Sans",
         "font.size":            cfg.analysis.plotting.font_size,
@@ -69,19 +73,32 @@ def apply_style() -> None:
         "axes.labelcolor":      PALETTE["text"],
         "xtick.color":          PALETTE["text"],
         "ytick.color":          PALETTE["text"],
-        "axes.edgecolor":       PALETTE["grid"],
+        "axes.edgecolor":       PALETTE["spine"],
         "grid.color":           PALETTE["grid"],
         "legend.facecolor":     PALETTE["surface"],
-        "legend.edgecolor":     PALETTE["grid"],
+        "legend.edgecolor":     PALETTE["spine"],
+        "legend.labelcolor":    PALETTE["text"],
+        "patch.edgecolor":      PALETTE["bg"],
+        "patch.force_edgecolor": False,
 
         "axes.grid":            True,
         "grid.linestyle":       "--",
-        "grid.alpha":           0.4,
+        "grid.alpha":           0.65,
         "lines.linewidth":      2.0,
+        "axes.prop_cycle":      cycler(color=[
+            PALETTE["msp"],
+            PALETTE["maxlogit"],
+            PALETTE["maxentropy"],
+            PALETTE["rba"],
+            PALETTE["boundary"],
+            PALETTE["flat"],
+        ]),
 
         "figure.dpi":           DEFAULT_DPI,
         "savefig.dpi":          DEFAULT_DPI,
         "savefig.facecolor":    PALETTE["bg"],
+        "savefig.edgecolor":    PALETTE["bg"],
+        "savefig.transparent":  False,
         "savefig.bbox":         "tight",
     })
 
@@ -106,9 +123,19 @@ def save_fig(
     """
     os.makedirs(out_dir, exist_ok=True)
     saved = []
+    fig.patch.set_facecolor(PALETTE["bg"])
+    fig.patch.set_alpha(1.0)
+    for ax in fig.axes:
+        ax.set_facecolor(PALETTE["surface"])
     for fmt in formats:
         path = os.path.join(out_dir, f"{filename}.{fmt}")
-        fig.savefig(path, format=fmt)
+        fig.savefig(
+            path,
+            format=fmt,
+            facecolor=PALETTE["bg"],
+            edgecolor=PALETTE["bg"],
+            transparent=False,
+        )
         saved.append(path)
     plt.close(fig)
     return saved
@@ -188,7 +215,7 @@ def plot_metric_heatmap(
     out_dir: str,
     filename: str,
     fmt: str = ".2f",
-    cmap: str = "YlOrRd",
+    cmap: str = "Blues",
     figsize: Tuple[int, int] = (10, 5),
 ) -> List[str]:
     """

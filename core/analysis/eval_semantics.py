@@ -544,7 +544,7 @@ class SemanticAnalyser:
             title=f"AuPRC (%) by Depth Band\n{self.model_name} | {self.dataset_type}",
             out_dir=self.out_dir,
             filename=f"depth_heatmap_auprc_{dataset_tag}",
-            cmap="YlGn",
+            cmap="Blues",
         )
         logger.info(f"Saved depth AuPRC heatmap: {paths}")
 
@@ -560,7 +560,7 @@ class SemanticAnalyser:
             title=f"FPR@95 (%) by Depth Band\n{self.model_name} | {self.dataset_type}",
             out_dir=self.out_dir,
             filename=f"depth_heatmap_fpr95_{dataset_tag}",
-            cmap="YlOrRd",
+            cmap="Blues",
         )
         logger.info(f"Saved depth FPR95 heatmap: {paths}")
 
@@ -597,7 +597,7 @@ class SemanticAnalyser:
         bars2 = ax.bar(x + w / 2, deltas_fpr95, w, label="ΔFPR95 (Boundary−Flat)",
                        color=colors_fpr95, alpha=0.85, edgecolor="white", linewidth=0.5)
 
-        ax.axhline(0, color="white", linewidth=0.8, linestyle="--", alpha=0.5)
+        ax.axhline(0, color=PALETTE["text"], linewidth=0.8, linestyle="--", alpha=0.5)
         ax.set_xticks(x)
         ax.set_xticklabels([m.upper() for m in methods])
         ax.set_ylabel("Delta (%)")

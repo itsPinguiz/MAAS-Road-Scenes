@@ -281,7 +281,7 @@ class ObjectAnalyser:
         if tot > 0:
             fig, ax = plt.subplots(figsize=(6, 6))
             ax.pie([things_cnt, stuff_cnt], labels=["Things", "Stuff"],
-                   colors=[PALETTE["msp"], PALETTE["maxlogit"]], textprops={'color': "white"},
+                   colors=[PALETTE["msp"], PALETTE["maxlogit"]], textprops={'color': PALETTE["text"]},
                    autopct='%1.1f%%', startangle=90)
             ax.set_title("OOD pixels classified as Things vs Stuff")
             fig.tight_layout()
