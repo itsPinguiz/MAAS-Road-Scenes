@@ -1,7 +1,6 @@
 # =============================================================================
 # MAAS-Road-Scenes Pipeline Configuration
-# All paths are relative to the project root (the directory of this file).
-# =============================================================================
+# Paths are resolved relative to the repository root unless absolute.
 # =============================================================================
 # Pipeline Execution Flags
 # =============================================================================
@@ -41,13 +40,14 @@ paths:
     eomt_python: "core/evaluation/eomt/.venv_eomt/bin/python"
 
 # =============================================================================
-# Evaluation hyper-parameters
+# Evaluation hyperparameters
 # =============================================================================
 eval:
   temperatures: [0.5, 0.75, 1.1]
   num_classes: 20
   ignore_index: 19
   save_logits: false
+
 # =============================================================================
 # Analysis parameters
 # =============================================================================
@@ -68,7 +68,7 @@ analysis:
   # Output
   reports_dir: "results/analysis_reports"
   
-  # Plotting Defaults
+  # Plotting defaults
   plotting:
     dpi: 150
     figsize: [12, 6]
@@ -80,22 +80,20 @@ analysis:
 # =============================================================================
 solutions:
   augmentation:
-    p_apply: 0.25              # Gentile: evita di trasformare ogni batch in dominio sintetico
-    p_small: 0.85              # Favorisce ostacoli piccoli su strada
-    small_scale_range: [0.0005, 0.008] # Oggetti piccoli tipo detriti/bottiglie/sacchetti
-    large_scale_range: [0.02, 0.08]    # Limita i casi enormi per non sovra-specializzare
-    perspective_strength: 1.0  # Moltiplicatore Y-based (1 = attenua molto in lontananza)
-    boundary_rate: 0.0         # No boundary bias: prima proviamo anomalie su road/flat pixels
-    road_rate: 0.9             # % dei paste non-boundary centrati su pixel road
-    road_class_id: 0           # Cityscapes trainId road
-    # Classi Cityscapes critiche: building(2), wall(3), fence(4), pole(5), vegetation(8), terrain(9)
-    # L'ID Mapped di Cityscapes (trainId) è diverso:
-    # 2 (building)->2, 3 (wall)->3, 4 (fence)->4, 5 (pole)->5, 8 (vegetation)->8, 9 (terrain)->9
-    boundary_classes: [2, 3, 4, 5, 8, 9] 
-    alpha: 1.0                 # Hard pasting
-    edge_feathering: true      # Feather leggero per ridurre cue artificiali di bordo
-    noise_std: 0.0             # Evita che il modello impari rumore globale come scorciatoia
-  
+    p_apply: 0.25              # Keep synthetic OOD from dominating every batch.
+    p_small: 0.85              # Prefer small road obstacles.
+    small_scale_range: [0.0005, 0.008] # Small debris, bottles, bags, and similar objects.
+    large_scale_range: [0.02, 0.08]    # Avoid overfitting to very large pasted objects.
+    perspective_strength: 1.0  # Shrink pasted objects toward the horizon.
+    boundary_rate: 0.0         # Place anomalies on road/flat pixels before boundary cases.
+    road_rate: 0.9             # Share of non-boundary pastes centered on road pixels.
+    road_class_id: 0           # Cityscapes trainId for road.
+    # Critical Cityscapes trainIds: building, wall, fence, pole, vegetation, terrain.
+    boundary_classes: [2, 3, 4, 5, 8, 9]
+    alpha: 1.0                 # Use hard pasting.
+    edge_feathering: true      # Soften cutout edges without adding strong artifacts.
+    noise_std: 0.0             # Avoid teaching global noise as an OOD shortcut.
+
   training:
     resume_from: null           # null: fresh run (new timestamped folder) | path: resume from that specific run folder
                                 # Accepts relative (to project root) or absolute paths.
@@ -104,11 +102,11 @@ solutions:
     lr: 0.00001
     batch_size: 4
     num_workers: 8
-    ood_loss_type: "entropy_logit_norm"  # varianti: max_entropy, entropy_logit_norm, energy, logit_norm
+    ood_loss_type: "entropy_logit_norm"  # Options: max_entropy, entropy_logit_norm, energy, logit_norm.
     ood_entropy_weight: 1.0
     ood_logit_norm_weight: 0.01
     ood_loss_weight: 0.05
     ood_loss_warmup_epochs: 3
-    ce_loss_weight: 2.0          # alzato da 1.0 → 2.0 per compensare il calo di mIoU
-    results_dir:    "results/solutions"      # log e output vari
-    checkpoint_dir: "checkpoints/solutions"  # salvataggio e caricamento checkpoint fine-tuned
+    ce_loss_weight: 2.0          # Raised from 1.0 to reduce mIoU regression.
+    results_dir:    "results/solutions"      # Logs and auxiliary outputs.
+    checkpoint_dir: "checkpoints/solutions"  # Fine-tuned checkpoints.

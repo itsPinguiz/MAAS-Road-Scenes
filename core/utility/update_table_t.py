@@ -18,6 +18,8 @@ _DATASETS_ORDER = list(DATASET_TO_COL_INDEX.keys())
 
 # Schema: { model_name: [list of method names] }
 # Methods are built dynamically from cfg.eval.temperatures + a "best t" row.
+
+
 def _get_table_schema():
     temps = cfg.eval.temperatures  # e.g. [0.5, 0.75, 1.1]
     methods = [f"MSP (t = {t})" for t in temps] + ["MSP (best t)"]
@@ -127,7 +129,7 @@ def update_table_t_entry(model: str, method: str, dataset: str = None, auprc: st
     soup = BeautifulSoup(html, 'html.parser')
     tbody = soup.find('tbody')
     if not tbody:
-        raise ValueError("<tbody> not found in TABLE_T.md even after _ensure_table() — this is a bug.")
+        raise ValueError("<tbody> not found in TABLE_T.md even after _ensure_table(); this is a bug.")
 
     current_model = None
     target_method = method.strip().lower()

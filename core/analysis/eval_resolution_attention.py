@@ -1,6 +1,6 @@
 """
-eval_resolution_attention.py — TASK 3: Risoluzione e Meccanismi di Attenzione (DINOv2/EoMT)
-===========================================================================================
+eval_resolution_attention.py - TASK 3: Resolution and Attention Analysis (DINOv2/EoMT)
+=====================================================================================
 
 Analyses:
   1. Resolution Trade-off: Iterates over multiple resolutions (short side sizes: 512, 768, 1024, etc.),
@@ -244,16 +244,17 @@ class ResAttnAnalyser:
         attn_map = np.zeros((1024, 1024))
         
         if qkv_outputs:
-            qkv = qkv_outputs[0] # (B, N, 3*C)
-            B, N, C3 = qkv.shape
+            qkv = qkv_outputs[0]  # Shape: (B, N, 3*C).
+            _, N, C3 = qkv.shape
             C = C3 // 3
-            q, k, v = qkv[0, :, :C], qkv[0, :, C:2*C], qkv[0, :, 2*C:]
+            q = qkv[0, :, :C]
+            k = qkv[0, :, C:2*C]
             
             num_heads = 12
             head_dim = C // num_heads
             
-            q = q.view(N, num_heads, head_dim).permute(1, 0, 2) # (num_heads, N, head_dim)
-            k = k.view(N, num_heads, head_dim).permute(1, 0, 2) 
+            q = q.view(N, num_heads, head_dim).permute(1, 0, 2)
+            k = k.view(N, num_heads, head_dim).permute(1, 0, 2)
             
             # Infer the spatial token grid from the nearest plausible square.
             num_spatial = 0
@@ -269,11 +270,10 @@ class ResAttnAnalyser:
                 w_feat = 64
                 num_spatial = 4096
                 
-            extra_start_tokens = N - num_spatial
             # DINOv2 usually starts spatial tokens after CLS/register tokens.
             start_spatial_idx = 5
             
-            patch_size_actual = 1024 // w_feat 
+            patch_size_actual = 1024 // w_feat
             tok_x_actual = min(int(cx / patch_size_actual), w_feat - 1)
             tok_y_actual = min(int(cy / patch_size_actual), h_feat - 1)
             token_index_actual = tok_y_actual * w_feat + tok_x_actual
@@ -281,11 +281,11 @@ class ResAttnAnalyser:
             tgt_idx = start_spatial_idx + token_index_actual
             
             if tgt_idx < N:
-                q_tok = q[:, tgt_idx, :].unsqueeze(1) # (num_heads, 1, head_dim)
-                attn = (q_tok @ k.transpose(-2, -1)) * (head_dim ** -0.5) # (num_heads, 1, N)
+                q_tok = q[:, tgt_idx, :].unsqueeze(1)
+                attn = (q_tok @ k.transpose(-2, -1)) * (head_dim ** -0.5)
                 attn = F.softmax(attn, dim=-1)
                 
-                attn_avg = attn.mean(dim=0).squeeze().cpu().numpy() # (N,)
+                attn_avg = attn.mean(dim=0).squeeze().cpu().numpy()
                 
                 spatial_attn = attn_avg[start_spatial_idx:start_spatial_idx + num_spatial]
                 spatial_attn = spatial_attn.reshape((h_feat, w_feat))

@@ -126,7 +126,7 @@ def update_table_entry(model: str, method: str, dataset: str = None, miou: str =
     tbody = soup.find('tbody')
     # _ensure_table guarantees tbody exists at this point
     if not tbody:
-        raise ValueError("<tbody> not found in TABLE.md even after _ensure_table() — this is a bug.")
+        raise ValueError("<tbody> not found in TABLE.md even after _ensure_table(); this is a bug.")
 
     current_model = None
     target_method = method.strip().lower()

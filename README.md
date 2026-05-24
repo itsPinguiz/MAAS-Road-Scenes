@@ -39,19 +39,19 @@ in Colab without editing individual scripts.
 
 ```text
 MAAS-Road-Scenes/
-├── assets/                  # README banner and project media
-├── config/config.yml         # Central paths, flags, and experiment settings
-├── core/
-│   ├── analysis/             # Fine-grained analysis scripts
-│   ├── evaluation/           # Evaluation pipeline and model-specific wrappers
-│   ├── solutions/            # Outlier augmentation, fine-tuning, checkpoint ranking
-│   └── utility/              # Config loader, logging, table updates
-├── third_party/
-│   ├── eval/                 # ERFNet evaluation code and requirements
-│   └── eomt/                 # EoMT code, configs, docs, and requirements
-├── results/                  # Generated tables, reports, plots, checkpoint rankings
-├── Datasets/                 # Local datasets; not intended for source control
-└── checkpoints/              # Local model weights; not intended for source control
++-- assets/                  # README banner and project media
++-- config/config.yml         # Central paths, flags, and experiment settings
++-- core/
+|   +-- analysis/             # Fine-grained analysis scripts
+|   +-- evaluation/           # Evaluation pipeline and model-specific wrappers
+|   +-- solutions/            # Outlier augmentation, fine-tuning, checkpoint ranking
+|   +-- utility/              # Config loader, logging, table updates
++-- third_party/
+|   +-- eval/                 # ERFNet evaluation code and requirements
+|   +-- eomt/                 # EoMT code, configs, docs, and requirements
++-- results/                  # Generated tables, reports, plots, checkpoint rankings
++-- Datasets/                 # Local datasets; not intended for source control
++-- checkpoints/              # Local model weights; not intended for source control
 ```
 
 ## Setup

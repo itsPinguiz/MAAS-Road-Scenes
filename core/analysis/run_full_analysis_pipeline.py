@@ -144,38 +144,35 @@ def main():
             
             logger.info(f"\n[bold magenta]Evaluating {model_name} on {dataset_name}[/bold magenta]")
             
-            # Base arguments for Task 1 and 2
             base_args = [
-                str(python_exec),
-                "", # placeholder for script path
                 "--logits_dir", str(logits_dir),
                 "--images_glob", str(d["images_glob"]),
                 "--dataset_type", dataset_type,
                 "--model_name", model_name,
                 "--out_dir", str(out_dir)
             ]
-            
-            # --- TASK 1 ---
-            cmd1 = list(base_args)
-            cmd1[1] = str(script_semantics)
+
+            cmd1 = [str(python_exec), str(script_semantics), *base_args]
             ok1 = run_command(cmd1, f"Semantics ({model_name} / {dataset_name})", sys_env)
-            
-            # --- TASK 2 ---
-            cmd2 = list(base_args)
-            cmd2[1] = str(script_objects)
+
+            cmd2 = [str(python_exec), str(script_objects), *base_args]
             ok2 = run_command(cmd2, f"Objects ({model_name} / {dataset_name})", sys_env)
-            
-            # --- TASK 3 ---
+
+            model_weights = (
+                cfg.paths.models.eomt_checkpoint
+                if model_name == "EoMT"
+                else cfg.paths.models.erfnet_weights
+            )
             cmd3 = [
                 str(python_exec),
                 str(script_res_attn),
                 "--images_glob", str(d["images_glob"]),
                 "--dataset_type", dataset_type,
                 "--out_dir", str(out_dir),
-                "--model_weights", os.path.join(str(root_dir), cfg.paths.models.eomt_checkpoint if model_name == "EoMT" else cfg.paths.models.erfnet_weights)
+                "--model_weights", str(model_weights),
             ]
-            
-            # Specific execution rule for Task 3 based on the model:
+
+            # Task 3 runs resolution for ERFNet and attention for EoMT.
             if model_name == "ERFNet":
                 cmd3.append("--run_resolution_eval")
             elif model_name == "EoMT":
@@ -183,13 +180,13 @@ def main():
 
             ok3 = run_command(cmd3, f"Res/Attn ({model_name} / {dataset_name})", sys_env)
             
-            res1 = "✅" if ok1 else "❌"
-            res2 = "✅" if ok2 else "❌"
-            res3 = "✅" if ok3 else "❌"
+            res1 = "OK" if ok1 else "FAIL"
+            res2 = "OK" if ok2 else "FAIL"
+            res3 = "OK" if ok3 else "FAIL"
             
             summary_lines.append(f"| {model_name} | {dataset_name} | {res1} | {res2} | {res3} |")
             
-    # Write Final Summary Markdown
+    # Write the final Markdown summary.
     summary_path = reports_dir / "SUMMARY.md"
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write("\n".join(summary_lines))

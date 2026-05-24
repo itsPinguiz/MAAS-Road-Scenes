@@ -219,7 +219,7 @@ def plot_metric_heatmap(
     figsize: Tuple[int, int] = (10, 5),
 ) -> List[str]:
     """
-    Plot a labelled heatmap (e.g., metric per method × depth band).
+    Plot a labelled heatmap, such as one metric per method and depth band.
 
     Args:
         matrix:      2-D numpy array [n_rows, n_cols].
@@ -281,7 +281,7 @@ def plot_auprc_vs_fps(
 
     ax.set_xlabel("Inference Speed (FPS)")
     ax.set_ylabel("AuPRC (%)")
-    ax.set_title("AuPRC vs Inference Speed — Resolution Trade-off")
+    ax.set_title("AuPRC vs Inference Speed - Resolution Trade-off")
     fig.tight_layout()
     return save_fig(fig, out_dir, filename)
 

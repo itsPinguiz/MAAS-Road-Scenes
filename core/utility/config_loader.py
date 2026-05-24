@@ -2,7 +2,7 @@
 config_loader.py
 ----------------
 Loads config.yml from the project root and exposes a fully-resolved `cfg`
-object.  All relative paths are converted to absolute paths at import time,
+object. All relative paths are converted to absolute paths at import time,
 so every script gets consistent references regardless of its cwd.
 
 Usage:
@@ -16,7 +16,7 @@ import sys
 import yaml
 from types import SimpleNamespace
 
-# Always points to the project root (the directory containing 'core', 'config', etc.)
+# Always points to the project root.
 _UTILITY_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(_UTILITY_DIR))
 _CONFIG_PATH = os.path.join(_PROJECT_ROOT, "config", "config.yml")
@@ -26,7 +26,7 @@ def _load() -> SimpleNamespace:
     with open(_CONFIG_PATH, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    # Colab detection: if running on Colab swap to the Colab drive root
+    # Use the configured Drive root when running inside Colab.
     is_colab = "google.colab" in sys.modules
     root = raw["paths"]["colab_root"] if is_colab else _PROJECT_ROOT
 
@@ -57,13 +57,14 @@ def _load() -> SimpleNamespace:
     ns_pipeline = dict_to_ns(raw.get("pipeline", {}))
 
     return SimpleNamespace(
-        paths=ns_paths, 
-        eval=ns_eval, 
+        paths=ns_paths,
+        eval=ns_eval,
         analysis=ns_analysis,
         solutions=ns_solutions,
         pipeline=ns_pipeline,
-        is_colab=is_colab
+        is_colab=is_colab,
     )
 
-# Single shared instance — import this in every script
+
+# Single shared instance; import this in every script.
 cfg = _load()

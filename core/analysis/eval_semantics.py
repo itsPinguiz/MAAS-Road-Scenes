@@ -1,5 +1,5 @@
 """
-eval_semantics.py  —  TASK 1: Spatial & Semantic Boundary Analysis
+eval_semantics.py - TASK 1: Spatial & Semantic Boundary Analysis
 ==================================================================
 
 Analyses WHERE the anomaly detection model fails spatially by splitting pixels
@@ -90,7 +90,7 @@ def compute_metrics(scores: np.ndarray, labels: np.ndarray) -> Tuple[float, floa
         labels: 1-D int array (1 = anomaly, 0 = in-distribution).
 
     Returns:
-        (auprc_pct, fpr95_pct) — both as percentages [0, 100].
+        (auprc_pct, fpr95_pct), both as percentages [0, 100].
 
     Notes:
         - Pixels with labels == IGNORE_INDEX (255) are excluded.
@@ -142,7 +142,7 @@ def extract_boundary_mask(
         boundary = dilated_gt XOR eroded_gt
         (the ring of pixels around semantic transitions)
 
-    A pixel in the **boundary** mask is semantically ambiguous — it lies near
+    A pixel in the **boundary** mask is semantically ambiguous: it lies near
     a class edge. This is where MSP (based on max-softmax) is most likely to
     produce false positives because the softmax peak is naturally suppressed
     at class borders.
@@ -151,13 +151,13 @@ def extract_boundary_mask(
     homogeneous region (all-OOD or all-in-dist).
 
     Args:
-        gt_mask:      H×W uint8 with values 0, 1, 255.
+        gt_mask:      HxW uint8 with values 0, 1, 255.
         kernel_size:  Size of the square structuring element (pixels).
                       Larger = wider boundary ring.
 
     Returns:
-        boundary_mask: H×W bool, True where pixel is near a semantic edge.
-        flat_mask:     H×W bool, True where pixel is deep inside a region.
+        boundary_mask: HxW bool, True where pixel is near a semantic edge.
+        flat_mask:     HxW bool, True where pixel is deep inside a region.
 
     Notes:
         - Ignore pixels (255) are excluded from both partitions.
@@ -508,7 +508,7 @@ class SemanticAnalyser:
         paths = plot_grouped_bar(
             data=auprc_data,
             metric_name="AuPRC (%)",
-            title=f"AuPRC — Boundary vs Flat Region\n{self.model_name} | {self.dataset_type}",
+            title=f"AuPRC - Boundary vs Flat Region\n{self.model_name} | {self.dataset_type}",
             out_dir=self.out_dir,
             filename=f"boundary_auprc_{dataset_tag}",
         )
@@ -522,7 +522,7 @@ class SemanticAnalyser:
         paths = plot_grouped_bar(
             data=fpr95_data,
             metric_name="FPR@95 (%)",
-            title=f"FPR@95 — Boundary vs Flat Region\n{self.model_name} | {self.dataset_type}",
+            title=f"FPR@95 - Boundary vs Flat Region\n{self.model_name} | {self.dataset_type}",
             out_dir=self.out_dir,
             filename=f"boundary_fpr95_{dataset_tag}",
             higher_is_better=False,
@@ -592,9 +592,9 @@ class SemanticAnalyser:
         colors_auprc = [PALETTE.get(m, f"C{i}") for i, m in enumerate(methods)]
         colors_fpr95 = [PALETTE["boundary"]] * len(methods)
 
-        bars1 = ax.bar(x - w / 2, deltas_auprc, w, label="ΔAuPRC (Flat−Boundary)",
+        bars1 = ax.bar(x - w / 2, deltas_auprc, w, label="Delta AuPRC (Flat - Boundary)",
                        color=colors_auprc, alpha=0.85, edgecolor="white", linewidth=0.5)
-        bars2 = ax.bar(x + w / 2, deltas_fpr95, w, label="ΔFPR95 (Boundary−Flat)",
+        bars2 = ax.bar(x + w / 2, deltas_fpr95, w, label="Delta FPR95 (Boundary - Flat)",
                        color=colors_fpr95, alpha=0.85, edgecolor="white", linewidth=0.5)
 
         ax.axhline(0, color=PALETTE["text"], linewidth=0.8, linestyle="--", alpha=0.5)
@@ -625,7 +625,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=textwrap.dedent("""\
-            eval_semantics.py — Task 1: Semantic Boundary & Depth Analysis
+            eval_semantics.py - Task 1: Semantic Boundary & Depth Analysis
 
             Computes AuPRC and FPR@TPR95 for:
               (a) boundary pixels (near semantic edges) vs flat pixels
@@ -648,7 +648,7 @@ def parse_args() -> argparse.Namespace:
         "--dataset_type",
         required=True,
         choices=["fs_static", "road_anomaly", "road_anomaly21", "road_obstacle21", "lost_found", "streethazard"],
-        help="Dataset type — determines GT label remapping.",
+        help="Dataset type; determines GT label remapping.",
     )
     parser.add_argument(
         "--model_name",
