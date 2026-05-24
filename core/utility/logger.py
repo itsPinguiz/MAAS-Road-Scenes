@@ -13,7 +13,7 @@ def success(self, message, *args, **kws):
 
 
 # Register SUCCESS on the standard Logger class.
-logging.Logger.success = success
+logging.Logger.success = success  # type: ignore[assignment]
 
 custom_theme = Theme({
     "logging.level.info": "blue",
