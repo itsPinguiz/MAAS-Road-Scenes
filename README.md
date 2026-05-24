@@ -2,367 +2,236 @@
   <img src="assets/banner.png" alt="MAAS-Road-Scenes Banner" width="800">
 
   # MAAS-Road-Scenes
-  
+
   **Multi-Armed Adversarial Selection for Road Scene Anomaly Detection**
 
   [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-  [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)](https://pytorch.org/)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-  ---
+  [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C.svg)](https://pytorch.org/)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 </div>
 
 ## Overview
 
-**MAAS-Road-Scenes** is a comprehensive evaluation pipeline designed for robust semantic segmentation and anomaly detection in road environments. It integrates state-of-the-art models like **ERFNet** and **EoMT** (Encoder-only Mask Transformer) to evaluate their performance across diverse out-of-distribution (OOD) datasets.
+MAAS-Road-Scenes is an evaluation and analysis workspace for semantic segmentation
+anomaly detection in road scenes. It compares ERFNet and EoMT
+(Encoder-only Mask Transformer) on common out-of-distribution road benchmarks,
+tracks calibration behavior with temperature sweeps, and provides fine-grained
+analysis of where models fail: boundaries, object scale, depth bands, semantic
+confusions, resolution trade-offs, and attention behavior.
 
-The project focuses on automated benchmarking, temperature scaling analysis, and modular evaluation across multiple datasets, providing a unified interface for researchers to assess model reliability in safety-critical autonomous driving scenarios.
+The project is organized around a config-driven pipeline in `config/config.yml`.
+Most scripts resolve paths from that file, so experiments can be rerun locally or
+in Colab without editing individual scripts.
 
-## Key Features
+## What Is Included
 
-- **Multi-Model Support**: Native integration of **ERFNet** and **EoMT**.
-- **Automated Pipeline**: End-to-end evaluation from inference to results table generation.
-- **Temperature Scaling**: Integrated tools for OOD detection calibration via temperature scaling.
-- **Extensive Datasets**: Pre-configured support for Cityscapes, Fishyscapes, RoadAnomaly, and more.
-- **Markdown Reporting**: Automatic generation of summary tables in `results/`.
+- ERFNet and EoMT evaluation wrappers for Cityscapes mIoU and OOD benchmarks.
+- OOD metrics for MSP, MaxLogit, Max Entropy, and RbA where supported.
+- Temperature scaling sweeps for calibration analysis.
+- Logit-saving support for offline fine-grained analysis.
+- Analysis scripts for semantic boundaries, anomaly object size, depth bands,
+  things/stuff false positives, resolution/FPS, and EoMT attention overlays.
+- EoMT fine-tuning utilities with COCO outlier cutout pasting and checkpoint
+  selection.
+- Markdown result tables and analysis reports under `results/`.
 
----
-
-## Project Structure
+## Repository Layout
 
 ```text
 MAAS-Road-Scenes/
-├── assets/             # Project media and banner
-├── config/             # YAML configuration files
-├── core/               # Core logic and pipeline scripts
-│   ├── evaluation/     # Main evaluation suite (run_pipeline.py)
-│   └── utility/        # Shared utilities (logger, config loader)
-├── Datasets/           # Symbolic links or data folders (Cityscapes, etc.)
-├── results/            # Automatically generated performance tables
-├── third_party/        # Integrated researchers' codebases (ERFNet, EoMT)
-└── checkpoints/        # Model weights and checkpoints
+├── assets/                  # README banner and project media
+├── config/config.yml         # Central paths, flags, and experiment settings
+├── core/
+│   ├── analysis/             # Fine-grained analysis scripts
+│   ├── evaluation/           # Evaluation pipeline and model-specific wrappers
+│   ├── solutions/            # Outlier augmentation, fine-tuning, checkpoint ranking
+│   └── utility/              # Config loader, logging, table updates
+├── third_party/
+│   ├── eval/                 # ERFNet evaluation code and requirements
+│   └── eomt/                 # EoMT code, configs, docs, and requirements
+├── results/                  # Generated tables, reports, plots, checkpoint rankings
+├── Datasets/                 # Local datasets; not intended for source control
+└── checkpoints/              # Local model weights; not intended for source control
 ```
 
----
+## Setup
 
-##  Getting Started
-
-### 1. Prerequisites
-
-This project uses **two distinct virtual environments** to manage dependencies between different model implementations (ERFNet and EoMT).
-
-### 2. Installation
+This project uses separate environments because ERFNet and EoMT have different
+dependency stacks. The paths below match the defaults in `config/config.yml`.
 
 ```bash
-# Clone the repository
 git clone https://github.com/itsPinguiz/MAAS-Road-Scenes.git
 cd MAAS-Road-Scenes
 
-# Setup Virtual Environments (Example using venv)
-# 1. Environment for general evaluation (ERFNet)
+# ERFNet/general evaluation environment
 python -m venv core/evaluation/eval/.venv_eval
-source core/evaluation/eval/.venv_eval/bin/python -m pip install -r core/evaluation/eval/requirements.txt
+core/evaluation/eval/.venv_eval/bin/python -m pip install --upgrade pip
+core/evaluation/eval/.venv_eval/bin/python -m pip install \
+  -r third_party/eval/requirements.txt \
+  -r core/requirements.txt
 
-# 2. Environment for EoMT
+# EoMT environment
 python -m venv core/evaluation/eomt/.venv_eomt
-source core/evaluation/eomt/.venv_eomt/bin/python -m pip install -r core/evaluation/eomt/requirements.txt
+core/evaluation/eomt/.venv_eomt/bin/python -m pip install --upgrade pip
+core/evaluation/eomt/.venv_eomt/bin/python -m pip install \
+  -r third_party/eomt/requirements.txt \
+  -r core/requirements.txt
 ```
 
-### 3. Usage
+PyTorch wheels are CUDA-specific. If the pinned versions in the requirements do
+not match your machine, install the correct PyTorch build first from the official
+PyTorch selector, then install the remaining requirements.
 
-To run the entire evaluation pipeline, simply execute the `run_pipeline.py` script. This will orchestrate the full suite of tests across all configured models and datasets.
+## Data And Checkpoints
 
-```bash
-python core/evaluation/run_pipeline.py
+Configure all local paths in `config/config.yml`. By default the project expects:
+
+```text
+Datasets/Cityscapes
+Datasets/Fishyscapes/fs_static/images/*.jpg
+Datasets/Fishyscapes/FS_LostFound_full/images/*.png
+Datasets/RoadAnomaly/images/*.jpg
+Datasets/SegmentMeIfYouCan/RoadAnomaly21/images/*.png
+Datasets/SegmentMeIfYouCan/RoadObsticle21/images/*.webp
+checkpoints/erfnet_pretrained.pth
+checkpoints/eomt_cityscapes.bin
+checkpoints/solutions/<run>/epoch_*_EoMT.pth
 ```
 
-Results will be saved as formatted tables in:
-- `results/TABLE.md`: Main performance metrics.
-- `results/TABLE_T.md`: Temperature scaling analysis.
+The current config points EoMT evaluation at:
 
----
-
-##  Fine-Grained Analysis
-
-We provide an advanced suite of analysis tools to evaluate models beyond global metrics. These scripts use pre-saved logits (generated by `evalAnomaly.py` when using `--save_logits`) to run granular performance breakdowns without requiring GPU inference.
-
-### 1. Spatial & Semantic Boundary Analysis
-Analyzes anomaly detection performance near semantic class borders versus homogeneous flat regions, as well as breaking down performance by distance/depth using horizontal image bands.
-```bash
-python core/analysis/eval_semantics.py \
-    --logits_dir   core/evaluation/eval/saved_logits/erfnet/Fishyscapes_Static \
-    --images_glob  "Datasets/Fishyscapes/fs_static/images/*.jpg" \
-    --dataset_type fs_static \
-    --model_name   ERFNet
+```text
+checkpoints/solutions/20260516_130935/epoch_3_EoMT.pth
 ```
-*Outputs are saved to `results/analysis/semantics/`*
 
-### 2. Object Typology Analysis
-Finds connected components in the Ground Truth to evaluate performance specifically on small, medium, and large anomalies. It additionally maps in-distribution false positives to standard categories like "Things" vs. "Stuff".
+Set `pipeline.run_erfnet` and `pipeline.run_eomt` in `config/config.yml` to choose
+which model families are evaluated.
+
+## Run Evaluation
+
+From the repository root:
+
 ```bash
-python core/analysis/eval_objects.py \
-    --logits_dir   core/evaluation/eval/saved_logits/erfnet/Fishyscapes_Static \
-    --images_glob  "Datasets/Fishyscapes/fs_static/images/*.jpg" \
-    --dataset_type fs_static \
-    --model_name   ERFNet
+core/evaluation/eval/.venv_eval/bin/python core/evaluation/run_pipeline.py
 ```
-*Outputs are saved to `results/analysis/objects/`*
 
-### 3. Resolution & Attention Mechanisms
-Measures the computation-accuracy trade-off by comparing inference resolutions to Frames Per Second (FPS). Additionally extracts the self-attention maps corresponding to anomaly tokens within Vision Transformers (e.g., EoMT / DINOv2) using PyTorch forward hooks.
+The pipeline runs the enabled stages in order:
+
+1. ERFNet Cityscapes mIoU and optional logits.
+2. ERFNet OOD datasets.
+3. EoMT Cityscapes mIoU and optional logits.
+4. EoMT OOD datasets.
+5. ERFNet temperature sweep.
+6. EoMT temperature sweep.
+
+To generate logits for offline analysis, set this in `config/config.yml` before
+running the pipeline:
+
+```yaml
+eval:
+  save_logits: true
+```
+
+Result tables are written to the configured table paths, currently
+`results/TABLE.md` and `results/TABLE_T.md`. Additional snapshots are kept under
+`results/evaluation/`.
+
+## Fine-Grained Analysis
+
+After saving logits, run the full analysis pipeline:
+
 ```bash
+core/evaluation/eomt/.venv_eomt/bin/python core/analysis/run_full_analysis_pipeline.py
+```
+
+Outputs are written to `results/analysis_reports/`, with one subdirectory per
+model and dataset plus a summary at `results/analysis_reports/SUMMARY.md`.
+
+Individual analysis scripts can also be run directly:
+
+```bash
+core/evaluation/eomt/.venv_eomt/bin/python core/analysis/eval_semantics.py \
+  --logits_dir core/evaluation/eomt/saved_logits/eomt/<checkpoint>/<dataset> \
+  --images_glob "Datasets/Fishyscapes/fs_static/images/*.jpg" \
+  --dataset_type fs_static \
+  --model_name EoMT
+
+core/evaluation/eomt/.venv_eomt/bin/python core/analysis/eval_objects.py \
+  --logits_dir core/evaluation/eomt/saved_logits/eomt/<checkpoint>/<dataset> \
+  --images_glob "Datasets/Fishyscapes/fs_static/images/*.jpg" \
+  --dataset_type fs_static \
+  --model_name EoMT
+
 core/evaluation/eomt/.venv_eomt/bin/python core/analysis/eval_resolution_attention.py \
-    --images_glob  "Datasets/Fishyscapes/fs_static/images/*.jpg" \
-    --dataset_type fs_static \
-    --run_resolution_eval \
-    --run_attention_eval
+  --images_glob "Datasets/Fishyscapes/fs_static/images/*.jpg" \
+  --dataset_type fs_static \
+  --run_attention_eval \
+  --model_weights checkpoints/solutions/<run>/epoch_<n>_EoMT.pth
 ```
-*Outputs are saved to `results/analysis/resolution_attention/`*
 
----
+## Fine-Tuning Workflow
 
-## Project Status & Results
+The `core/solutions` package contains the current mitigation experiments:
+COCO outlier extraction, EoMT fine-tuning with pasted OOD objects, and checkpoint
+ranking.
 
-Based on the evaluations run in the `results` folder, here is an overview of the project's performance and findings so far.
+Prepare transparent COCO cutouts:
 
-### 1. Main Performance Metrics
+```bash
+core/evaluation/eomt/.venv_eomt/bin/python core/solutions/prepare_coco_outliers.py \
+  --img-dir Datasets/COCO/val2017 \
+  --ann-file Datasets/COCO/annotations_trainval2017/annotations/instances_val2017.json \
+  --output-dir Datasets/Outliers_COCO
+```
 
-*Baseline evaluations across standard anomaly detection benchmarks.*
+Run the configured EoMT fine-tuning job:
 
-<table>
-<thead>
-<tr>
-<th></th>
-<th></th>
-<th></th>
-<th colspan="2">SMIYC RA-21</th>
-<th colspan="2">SMIYC RO-21</th>
-<th colspan="2">FS L&amp;F</th>
-<th colspan="2">FS Static</th>
-<th colspan="2">Road Anomaly</th>
-</tr>
-<tr>
-<th>Model</th>
-<th>Method</th>
-<th>mIoU</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td rowspan="3">ERFNET</td>
-<td>MSP</td>
-<td>72.17</td>
-<td>29.10</td><td>62.55</td>
-<td>2.71</td><td>65.22</td>
-<td>1.75</td><td>50.59</td>
-<td>7.47</td><td>41.84</td>
-<td>12.42</td><td>82.58</td>
-</tr>
-<tr>
-<td>MaxLogit</td>
-<td>72.17</td>
-<td>38.32</td><td>59.34</td>
-<td>4.63</td><td>48.44</td>
-<td>3.30</td><td>45.49</td>
-<td>9.50</td><td>40.30</td>
-<td>15.58</td><td>73.25</td>
-</tr>
-<tr>
-<td>Max Entropy</td>
-<td>72.17</td>
-<td>30.97</td><td>62.66</td>
-<td>3.04</td><td>65.91</td>
-<td>2.58</td><td>50.16</td>
-<td>8.84</td><td>41.55</td>
-<td>12.67</td><td>82.75</td>
-</tr>
-<tr>
-<td rowspan="4">EoMT</td>
-<td>MSP</td>
-<td>60.27</td>
-<td>68.10</td><td>30.39</td>
-<td>94.18</td><td>0.37</td>
-<td>16.37</td><td>12.98</td>
-<td>58.17</td><td>43.60</td>
-<td>71.35</td><td>15.48</td>
-</tr>
-<tr>
-<td>MaxLogit</td>
-<td>60.27</td>
-<td>67.49</td><td>31.57</td>
-<td>94.21</td><td>0.36</td>
-<td>16.35</td><td>12.74</td>
-<td>58.35</td><td>47.12</td>
-<td>70.77</td><td>15.09</td>
-</tr>
-<tr>
-<td>Max Entropy</td>
-<td>60.27</td>
-<td>68.14</td><td>30.60</td>
-<td>94.28</td><td>0.35</td>
-<td>18.64</td><td>12.79</td>
-<td>57.00</td><td>43.89</td>
-<td>73.33</td><td>14.71</td>
-</tr>
-<tr>
-<td>RbA</td>
-<td>60.27</td>
-<td>62.67</td><td>96.07</td>
-<td>93.51</td><td>0.42</td>
-<td>16.48</td><td>9.02</td>
-<td>60.54</td><td>73.93</td>
-<td>70.13</td><td>15.14</td>
-</tr>
-</tbody>
-</table>
+```bash
+core/evaluation/eomt/.venv_eomt/bin/python core/solutions/train.py
+```
 
-### 2. Temperature Scaling Analysis
+Rank checkpoints from a run:
 
-*Evaluating the impact of calibration on Max Softmax Probability.*
+```bash
+core/evaluation/eomt/.venv_eomt/bin/python core/solutions/select_best_checkpoint.py \
+  checkpoints/solutions/<run> \
+  --python core/evaluation/eomt/.venv_eomt/bin/python \
+  --device cuda \
+  --miou-baseline 60.27
+```
 
-<table>
-<thead>
-<tr>
-<th></th>
-<th></th>
-<th></th>
-<th colspan="2">SMIYC RA-21</th>
-<th colspan="2">SMIYC RO-21</th>
-<th colspan="2">FS L&amp;F</th>
-<th colspan="2">FS Static</th>
-<th colspan="2">Road Anomaly</th>
-</tr>
-<tr>
-<th>Model</th>
-<th>Method</th>
-<th>mIoU</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-<th>AuPRC</th>
-<th>FPR95</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td rowspan="4">ERFNET</td>
-<td>MSP (t = 0.5)</td>
-<td></td>
-<td>27.06</td><td>62.73</td>
-<td>2.42</td><td>63.23</td>
-<td>1.27</td><td>66.73</td>
-<td>4.48</td><td>42.42</td>
-<td>12.19</td><td>82.02</td>
-</tr>
-<tr>
-<td>MSP (t = 0.75)</td>
-<td></td>
-<td>28.16</td><td>62.49</td>
-<td>2.57</td><td>64.13</td>
-<td>1.48</td><td>51.73</td>
-<td>4.73</td><td>41.51</td>
-<td>12.32</td><td>82.31</td>
-</tr>
-<tr>
-<td>MSP (t = 1.1)</td>
-<td></td>
-<td>29.40</td><td>62.65</td>
-<td>2.76</td><td>65.87</td>
-<td>1.84</td><td>50.14</td>
-<td>5.17</td><td>40.71</td>
-<td>12.46</td><td>82.73</td>
-</tr>
-<tr>
-<td>MSP (best t)</td>
-<td></td>
-<td>29.40</td><td>62.65</td>
-<td>2.76</td><td>65.87</td>
-<td>1.84</td><td>50.14</td>
-<td>5.17</td><td>40.71</td>
-<td>12.46</td><td>82.73</td>
-</tr>
-<tr>
-<td rowspan="4">EoMT</td>
-<td>MSP (t = 0.5)</td>
-<td></td>
-<td>67.94</td><td>30.38</td>
-<td>94.16</td><td>0.37</td>
-<td>16.32</td><td>13.01</td>
-<td>22.88</td><td>42.82</td>
-<td>71.15</td><td>15.68</td>
-</tr>
-<tr>
-<td>MSP (t = 0.75)</td>
-<td></td>
-<td>68.03</td><td>30.39</td>
-<td>94.17</td><td>0.37</td>
-<td>16.32</td><td>13.00</td>
-<td>22.89</td><td>42.82</td>
-<td>71.27</td><td>15.53</td>
-</tr>
-<tr>
-<td>MSP (t = 1.1)</td>
-<td></td>
-<td>68.12</td><td>30.39</td>
-<td>94.18</td><td>0.37</td>
-<td>16.33</td><td>13.00</td>
-<td>22.90</td><td>42.83</td>
-<td>71.38</td><td>15.47</td>
-</tr>
-<tr>
-<td>MSP (best t)</td>
-<td></td>
-<td>68.12</td><td>30.39</td>
-<td>94.18</td><td>0.37</td>
-<td>16.33</td><td>13.00</td>
-<td>22.90</td><td>42.83</td>
-<td>71.38</td><td>15.47</td>
-</tr>
-</tbody>
-</table>
+Selection reports are written under `results/checkpoint_selection/`.
 
-### 3. Fine-Grained Analysis Report
+## Results
 
-The detailed analysis of **ERFNet** and **EoMT** reveals critical vulnerabilities that global metrics tend to mask:
-1. **The Boundary & Depth Problem:** A drastic performance drop occurs on semantic boundaries (e.g., FPR95 spikes from 61.94% to 90.43% for ERFNet). Additionally, both models exhibit "Vertical Blindness," failing entirely to detect distant anomalies at the horizon.
-2. **The Scale & Taxonomy Problem:** Vision Transformers like EoMT struggle significantly with small objects, performing poorly compared to large objects. Furthermore, both models demonstrate an "absorption" effect, mistakenly assigning anomalies to dominant background classes (such as "Road", "Vegetation", or "Truck").
-3. **Resolution Trade-off & Attention Failure:** Increasing input resolution improves small object detection but hinders real-time capabilities (FPS). Moreover, ViT attention maps often focus on surrounding classes instead of the anomaly itself, failing to trigger the uncertainty signal.
+Generated artifacts live in:
 
-For the full breakdown and visualizations, refer to the complete [REPORT.md](results/REPORT.md).
+- `results/TABLE.md` - current main evaluation table.
+- `results/evaluation/new/TABLE.md` - latest stored evaluation snapshot.
+- `results/evaluation/new/TABLE_T.md` - latest stored temperature snapshot.
+- `results/analysis_reports/SUMMARY.md` - fine-grained analysis run summary.
+- `results/checkpoint_selection/` - checkpoint ranking CSV/Markdown reports.
 
-### 4. Proposed Solutions
+The repository keeps generated Markdown tables and plots for traceability. Large
+datasets and model checkpoints should remain local.
 
-*(This section is reserved for upcoming architectural improvements and methodological solutions designed to address the boundary uncertainty, depth blindness, and scale-related issues identified in the analysis report.)*
+## Credits
 
----
+This project builds on the following open-source research code and papers:
 
-##  Credits & Citations
+**ERFNet**
 
-This project integrates and builds upon several incredible open-source contributions. We extend our gratitude to the authors of the following papers:
+Eduardo Romera, Jose M. Alvarez, Luis M. Bergasa, and Roberto Arroyo.
+*"ERFNet: Efficient Residual Factorized ConvNet for Real-Time Semantic Segmentation"*,
+IEEE Transactions on Intelligent Transportation Systems, 2017.
 
-### **ERFNet**
-> **Eduardo Romera, José M. Álvarez, Luis M. Bergasa, and Roberto Arroyo.**  
-> *"ERFNet: Efficient Residual Factorized ConvNet for Real-Time Semantic Segmentation"*  
-> IEEE Transactions on Intelligent Transportation Systems (T-ITS), 2017.
+**EoMT (Encoder-only Mask Transformer)**
 
-### **EoMT (Encoder-only Mask Transformer)**
-> **Tommie Kerssies, Niccolò Cavagnero, Alexander Hermans, Narges Norouzi, Giuseppe Averta, Gijs Dubbelman, and Daan de Geus.**  
-> *"Encoder-only Mask Transformer for Image Segmentation"*  
-> CVPR 2024. [[Original Repo](https://github.com/tue-mps/eomt)]
+Tommie Kerssies, Niccolo Cavagnero, Alexander Hermans, Narges Norouzi,
+Giuseppe Averta, Gijs Dubbelman, and Daan de Geus.
+*"Encoder-only Mask Transformer for Image Segmentation"*, CVPR 2024.
+Original repository: https://github.com/tue-mps/eomt
 
----
+## License
+
+This repository is released under the MIT License. See `LICENSE` for details.
