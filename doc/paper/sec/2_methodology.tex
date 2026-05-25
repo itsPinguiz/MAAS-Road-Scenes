@@ -1,0 +1,55 @@
+\section{Methodology}
+\label{sec:methodology}
+
+The goal of anomaly segmentation is to identify pixels belonging to objects from categories unseen during training, i.e., Out-of-Distribution (OoD), while preserving high accuracy on known In-Distribution (ID) classes. Formally, given a training dataset $D_{\text{train}}$ with $K$ semantic classes $C_{\text{train}} = \{c_1, \dots, c_K\}$, the model must segment each test image into $K+1$ classes, where the additional class corresponds to OoD pixels.
+
+To achieve this, our methodology contrasts two structurally diverse paradigms: pixel-level classification via Convolutional Neural Networks (CNNs) and query-based mask generation via Vision Transformers (ViTs).
+
+Since retraining for every new anomaly scenario is infeasible in safety-critical deployment, we rely on post-hoc scoring methods, uncertainty estimation techniques applied directly to pre-trained model outputs during inference.
+
+Specifically, we evaluate ERFNet as our CNN baseline and the Encoder-only Mask Transformer (EoMT) powered by DINOv2 as our ViT baseline. We apply a comprehensive suite of post-hoc scoring methods to both architectures and benchmark all configurations across multiple specialized datasets (SMIYC, Fishyscapes, Road Anomaly) designed to expose systematic Out-of-Distribution (OoD) detection failures.
+
+\subsection{Architectural Baselines}
+
+We evaluate two fundamentally distinct segmentation paradigms, contrasting local convolutional processing (ERFNet) against global query-based attention (EoMT).
+
+\textbf{ERFNet: Pixel-Level CNN Baseline} ERFNet is an encoder-decoder architecture optimized for real-time semantic segmentation. The encoder downsamples input ($1024\times512 \rightarrow 128\times64$) using residual blocks with factorized convolutions: standard $3\times3$ convolutions are decomposed into sequential $3\times1$ and $1\times3$ operations (\texttt{non\_bottleneck\_1d} layers), reducing parameters by $33\%$. Dilated convolutions (rates: 2, 4, 8, 16) expand the receptive field without computational overhead. At inference, ERFNet outputs per-pixel logits $L \in \mathbb{R}^{H \times W \times K}$, with decisions based on local context (effective receptive field ${\sim}200\times200$ pixels).
+
+\textbf{EoMT: Query-Based Mask Transformer} EoMT reframes segmentation as set prediction, using: (1) frozen DINOv2-ViT backbone ($16\times16$ patches); (2) lightweight pixel decoder; (3) Transformer decoder with $N=100$ learnable object queries. Each query $q_i \in \mathbb{R}^d$ generates class probabilities $p_i \in \mathbb{R}^K$ and binary masks $m_i \in \mathbb{R}^{H \times W}$ via masked cross-attention, restricting attention to predicted mask regions. Final predictions combine all queries via mask-weighted aggregation.
+
+\textbf{Structural Contrast} ERFNet relies on hierarchical local convolutions with limited receptive fields; EoMT leverages global self-attention with query coupling.
+
+\subsection{Post-Hoc Anomaly Scoring}
+
+To detect anomalies without retraining, we apply post-hoc scoring methods that extract uncertainty directly from pre-trained model outputs. These operate on logits $z \in \mathbb{R}^K$ or probabilities $p = \text{softmax}(z)$ to compute pixel-wise anomaly scores $A(x)$, where higher values indicate OoD likelihood. The baseline performances derived from these methods are summarized in \cref{tab:baselines}.
+
+\begin{itemize}
+\item \textbf{Maximum Softmax Probability (MSP):} A pixel-based method where $A_{\text{MSP}}(x) = 1 - \max_k p_k(x)$, given $p(x) = \text{softmax}(z(x)/T)$. Assumes low maximum probability signals uncertainty for OoD pixels.
+\item \textbf{MaxLogit and MaxEntropy:} Pixel-based methods using unnormalized activations. For MaxLogit, $A_{\text{MaxLogit}}(x) = -\max_k z_k(x)$, avoiding softmax saturation. For MaxEntropy, $A_{\text{MaxEntropy}}(x) = -\sum_k p_k(x) \log p_k(x)$, preventing softmax saturation that compresses OoD separation.
+\item \textbf{Temperature Scaling:} A pixel-based method where $p(x) = \text{softmax}(z(x)/T)$, which recalibrates overconfident predictions by smoothing the distribution.
+\item \textbf{Rejected by All (RbA):} A mask-specific method (only for EoMT). Core idea: OoD pixels remain unclaimed by all $N$ queries. We define $L(x) = \sum_{i=1}^N \sum_{k=1}^K \tanh(z_{i,k}(x)) \cdot m_i(x)$ and $A_{\text{RbA}}(x) = \max(0, 5 - L(x))$. Logic: High $L(x)$ corresponds to ID (claimed by a single confident query), while low $L(x)$ corresponds to OoD (diffuse weak attention from all queries).
+\end{itemize}
+
+\begin{table*}[t]
+\centering
+\caption{Baseline Anomaly Segmentation Results. Performance metrics (AuPRC and FPR95) across five datasets for ERFNet and EoMT using standard and mask-specific post-hoc methods. \textit{Best t} for Temperature Scaling is set to $t=1.1$.}
+\label{tab:baselines}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}llccccccccccc@{}}
+\toprule
+&  &  & \multicolumn{2}{c}{\textbf{SMIYC RA-21}} & \multicolumn{2}{c}{\textbf{SMIYC RO-21}} & \multicolumn{2}{c}{\textbf{FS L\&F}} & \multicolumn{2}{c}{\textbf{FS Static}} & \multicolumn{2}{c}{\textbf{Road Anomaly}} \\ \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9} \cmidrule(lr){10-11} \cmidrule(lr){12-13}
+\textbf{Model} & \textbf{Method} & \textbf{mIoU} & \textbf{AuPRC} & \textbf{FPR95} & \textbf{AuPRC} & \textbf{FPR95} & \textbf{AuPRC} & \textbf{FPR95} & \textbf{AuPRC} & \textbf{FPR95} & \textbf{AuPRC} & \textbf{FPR95} \\ \midrule
+\multirow{4}{*}{ERFNet}
+& MSP & 72.17 & 29.10 & 62.55 & 2.71 & 65.22 & 1.75 & 50.59 & 7.47 & 41.84 & 12.42 & 82.58 \\
+& MaxLogit & 72.17 & 38.32 & 59.34 & 4.63 & 48.44 & 3.30 & 45.49 & 9.50 & 40.30 & 15.58 & 73.25 \\
+& Max Entropy & 72.17 & 30.97 & 62.66 & 3.04 & 65.91 & 2.58 & 50.16 & 8.84 & 41.55 & 12.67 & 82.75 \\
+& MSP (best t) & 72.17 & 29.40 & 62.65 & 2.76 & 65.87 & 1.84 & 50.14 & 5.17 & 40.71 & 12.46 & 82.73 \\ \midrule
+\multirow{5}{*}{EoMT}
+& MSP & 60.27 & 68.10 & 30.39 & 94.18 & 0.37 & 16.37 & 12.98 & 58.17 & 43.60 & 71.35 & 15.48 \\
+& MaxLogit & 60.27 & 67.49 & 31.57 & 94.21 & 0.36 & 16.35 & 12.74 & 58.35 & 47.12 & 70.77 & 15.09 \\
+& Max Entropy & 60.27 & 68.14 & 30.60 & 94.28 & 0.35 & 18.64 & 12.79 & 57.00 & 43.89 & 73.33 & 14.71 \\
+& MSP (best t) & 60.27 & 68.12 & 30.39 & 94.18 & 0.37 & 16.33 & 13.00 & 22.90 & 42.83 & 71.38 & 15.47 \\
+& RbA & 60.27 & 62.67 & 96.07 & 93.51 & 0.42 & 16.48 & 9.02 & 60.54 & 73.93 & 70.13 & 15.14 \\ \bottomrule
+\end{tabular}%
+}
+\end{table*}

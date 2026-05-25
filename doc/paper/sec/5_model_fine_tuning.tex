@@ -1,0 +1,138 @@
+\section{Fine-Tuning with Cut-and-Paste Outlier Exposure}
+\label{sec:finetuning}
+
+In this work, we fine-tune the EoMT segmentation model using a
+\textit{cut-and-paste outlier exposure} strategy. The goal is to expose the model
+to synthetic object-level anomalies during training, while preserving its
+semantic segmentation performance on in-distribution Cityscapes data.
+
+The method constructs augmented training samples by pasting transparent object
+cutouts extracted from COCO into Cityscapes images. The pasted regions are treated
+as out-of-distribution pixels, while the remaining pixels retain their original
+Cityscapes semantic labels. This allows the model to continue learning the
+in-distribution segmentation task while also being regularized to produce
+uncertain predictions on anomalous regions.
+
+\subsection{Outlier Injection Strategy}
+
+\paragraph{COCO Object Cutouts.}
+Outlier objects are extracted from COCO instance annotations as RGBA cutouts. We
+use a manually selected subset of COCO categories that are plausible as road-scene
+anomalies, including animals, bags, bottles, furniture, plants, and other
+portable objects. For each selected instance, the COCO segmentation mask is used
+to preserve only the foreground object and store it with an alpha channel.
+
+During training, one cutout is sampled from the generated outlier pool and pasted
+into a Cityscapes image. The current implementation samples from the available
+cutout files rather than using an adaptive or learned category weighting scheme.
+
+\paragraph{Scale Prior.}
+To expose the model to anomalies of different sizes, the pasted object area is
+sampled from a bimodal distribution. In the reported configuration, small
+outliers are sampled with high probability:
+\begin{equation}
+P(s) =
+\begin{cases}
+\mathcal{U}(0.0005, 0.008) & \text{with probability } 0.85, \\
+\mathcal{U}(0.02, 0.08) & \text{with probability } 0.15.
+\end{cases}
+\end{equation}
+
+Here, $s$ denotes the target area ratio relative to the full image. This choice
+biases training toward small road obstacles while still occasionally introducing
+larger object-level anomalies.
+
+\paragraph{Perspective-Aware Placement.}
+The sampled scale is modulated according to the vertical placement of the object
+in the image:
+\begin{equation}
+s_{\text{eff}} =
+s \cdot \max\left(0.1, \left(\frac{y}{H}\right)^{\gamma}\right),
+\end{equation}
+where $y$ is the vertical coordinate of the paste center, $H$ is the image
+height, and $\gamma$ controls the perspective strength. This makes objects pasted
+near the top of the image smaller than objects pasted in the foreground.
+
+In the current configuration, placement is primarily road-biased. With high
+probability, the paste center is sampled from pixels belonging to the Cityscapes
+road class, preferably in the lower part of the image. If no suitable road pixel
+is selected, the object is placed at a random location in the lower image region.
+
+The implementation also supports boundary-aware placement near selected semantic
+classes such as buildings, walls, fences, poles, vegetation, and terrain.
+However, this option is disabled in the reported configuration.
+
+\paragraph{Photometric Blending.}
+Before pasting, the cutout is resized according to the sampled effective scale.
+A color jitter transformation is applied to increase appearance diversity. The
+implementation also supports edge feathering to reduce sharp mask artifacts at
+object boundaries. In the reported configuration, hard alpha blending is used
+with feathering enabled and no additional global noise.
+
+\subsection{Optimization Objective}
+
+Training uses a combined objective with a semantic segmentation term and an OOD
+regularization term:
+\begin{equation}
+\mathcal{L} =
+\lambda_{CE} \mathcal{L}_{CE} +
+\lambda_{OOD} \mathcal{L}_{OOD}.
+\end{equation}
+
+The cross-entropy loss $\mathcal{L}_{CE}$ is computed only on valid
+in-distribution Cityscapes pixels. Pasted OOD pixels are assigned the ignore
+label for the semantic cross-entropy term, so they do not contribute as ordinary
+Cityscapes classes.
+
+The OOD loss is computed only over pasted anomaly pixels. In the reported
+configuration, $\mathcal{L}_{OOD}$ combines a maximum-entropy objective with a
+logit-norm penalty:
+\begin{equation}
+\mathcal{L}_{OOD}
+=
+\lambda_H \mathcal{L}_{H}
++
+\lambda_N \mathcal{L}_{N}.
+\end{equation}
+
+The entropy term encourages high softmax uncertainty on pasted outliers, while
+the logit-norm term discourages overconfident high-magnitude logits in OOD
+regions. The OOD loss weight is gradually warmed up during the first training
+epochs to reduce instability.
+
+During fine-tuning, the DINOv2 encoder of EoMT is frozen. Only the remaining
+segmentation components are updated. This design is intended to preserve the
+pretrained visual representation and reduce catastrophic forgetting, while still
+adapting the segmentation head to recognize synthetic outlier regions as
+uncertain.
+
+\subsection{Empirical Behavior of the Fine-Tuned Model}
+
+The fine-tuned model is evaluated on multiple road-anomaly benchmarks using
+standard OOD detection metrics such as AuPRC and FPR@TPR95. The expected effect
+of the fine-tuning procedure is to improve the separation between
+in-distribution road-scene pixels and object-like anomalous regions.
+
+Because the training anomalies are structured object-level cutouts, the method is
+most directly aligned with medium and large object-like anomalies. Improvements
+are therefore expected to be more visible when the test anomalies are spatially
+coherent and visually similar to pasted objects. Gains may be more limited for
+very small, ambiguous, or texture-like anomalies.
+
+The frozen encoder and retained cross-entropy supervision help preserve
+in-distribution semantic segmentation behavior while the OOD regularization
+encourages less confident predictions on pasted anomaly pixels.
+
+\subsection{Summary}
+
+The proposed fine-tuning strategy introduces three main mechanisms:
+
+\begin{itemize}
+    \item synthetic object-level outlier exposure using COCO instance cutouts,
+    \item perspective-aware and road-biased placement of pasted anomalies,
+    \item OOD regularization through entropy maximization and logit-norm control.
+\end{itemize}
+
+Overall, this approach adapts EoMT toward improved OOD awareness without changing
+the underlying architecture. It uses synthetic anomalies only during training and
+preserves the standard semantic segmentation output at inference time.

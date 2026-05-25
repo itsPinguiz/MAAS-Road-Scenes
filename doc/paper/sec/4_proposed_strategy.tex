@@ -1,0 +1,35 @@
+\section{Proposed Strategy}
+\label{sec:strategy}
+
+Driven by the empirical evidence of the diagnostic analysis, we propose a comprehensive strategy designed to explicitly bridge the identified architectural gaps in Vision Transformers. We introduce a targeted Outlier Exposure framework, formulated through Perspective-Aware Pasting, coupled with Entropy and Logit Norm regularization, and efficient decoder-only fine-tuning.
+
+\subsection{Perspective-Aware Outlier Exposure}
+
+To overcome the Scale Gap and Vertical Blindness without incurring the computational penalty of high-resolution inference, we deploy a synthetically augmented data distribution using Cut-and-Paste outlier exposure. This process is governed by strict, data-driven priors designed to combat the ViT's vulnerabilities:
+
+\begin{itemize}
+    \item \textbf{Perspective Scaling:} To address Vertical Blindness, we simulate distance by scaling pasted outliers as a function of their vertical position in the frame ($y$-coordinate). Anomalies placed closer to the vanishing point are aggressively shrunk using a power-law perspective strength, forcing the network to detect distant, sub-patch anomalies.
+    
+    \item \textbf{Bimodal Scale Sampling:} To explicitly target the Scale Gap, our augmentation probabilistically favors extremely small scales. By dedicating the vast majority of pasted samples to a reduced scale range, we prevent the tokenization process from diluting high-frequency details, forcing the ViT to extract discriminative features from small objects.
+    
+    \item \textbf{Semantic Boundary Targeting:} To mitigate Boundary Degradation, we dynamically paste anomalies on critical semantic contours (e.g., Building, Wall, Fence, Pole, Vegetation, Terrain) and drivable road surfaces. This intentional overlap sharpens decision boundaries in regions of high semantic ambiguity.
+    
+    \item \textbf{Edge Feathering and Noise:} To prevent the model from learning trivial artificial pasting cues, we apply Gaussian blurring to the outlier masks and inject global noise, ensuring the network learns robust semantic features rather than compression artifacts.
+\end{itemize}
+
+\subsection{Entropy and Logit Norm Regulation}
+
+While Outlier Exposure introduces anomalies during training, the network requires a specialized objective to learn uncertainty. We introduce a combined loss function that optimizes In-Distribution (ID) accuracy while explicitly penalizing confident predictions on Out-of-Distribution (OoD) pixels.
+
+\textbf{Max Entropy Loss:} For pixels belonging to pasted outliers, we apply a Maximum Entropy loss ($\mathcal{L}_{\text{entropy}}$) that pushes the softmax probabilities toward a uniform distribution. This guarantees that no single class dominates the prediction for unknown objects.
+
+\textbf{Logit Norm Penalty:} Softmax entropy alone can be bypassed if the network learns to scale up logit magnitudes symmetrically. To combat this, we introduce an energy constraint ($\mathcal{L}_{\text{logit\_norm}}$) that penalizes the $L_2$ norm of the raw logits for OoD pixels. By minimizing the logit magnitudes, we suppress overconfidence before the softmax bottleneck.
+
+The total objective balances the standard Cross-Entropy loss ($\mathcal{L}_{\text{CE}}$) on clean pixels with the combined OoD regularization on pasted pixels:
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\text{CE}} + \lambda_1 \mathcal{L}_{\text{entropy}} + \lambda_2 \mathcal{L}_{\text{logit\_norm}}
+\end{equation}
+
+\subsection{Efficient Decoder-Only Fine-Tuning}
+
+To maintain the robust, open-world feature extraction capabilities of the Vision Transformer, we employ an efficient fine-tuning strategy. We freeze the pre-trained DINOv2 encoder backbone entirely. This prevents catastrophic forgetting of the powerful self-supervised representations that enable zero-shot generalization. We restrict gradient updates exclusively to the cross-attention queries and the classification heads within the mask decoder. This approach adheres to strict computational constraints while aggressively adapting the model's uncertainty estimates via the proposed outlier exposure and loss formulation.
