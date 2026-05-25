@@ -1,0 +1,107 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{romera2018erfnet}
+\citation{cheng2021maskformer}
+\citation{cheng2022mask2former}
+\citation{kerssies2025eomt}
+\citation{oquab2023dinov2}
+\citation{blum2019fishyscapes}
+\citation{chan2021segmentmeifyoucan}
+\@writefile{toc}{\contentsline {section}{\numberline {1}\hskip -1em.~Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{\texorpdfstring {\hskip -1em.~}{}Introduction}{section.1}{}}
+\newlabel{sec:intro@cref}{{[section][1][]1}{[1][1][]1}}
+\@writefile{brf}{\backcite{romera2018erfnet}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{cheng2021maskformer}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{cheng2022mask2former}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{kerssies2025eomt}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{oquab2023dinov2}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{blum2019fishyscapes}{{1}{1}{section.1}}}
+\@writefile{brf}{\backcite{chan2021segmentmeifyoucan}{{1}{1}{section.1}}}
+\citation{hendrycks2022scaling}
+\citation{nayal2023rba}
+\citation{cheng2021maskformer,cheng2022mask2former}
+\citation{hendrycks2022scaling}
+\@writefile{brf}{\backcite{hendrycks2022scaling}{{2}{1}{section.1}}}
+\@writefile{brf}{\backcite{nayal2023rba}{{2}{1}{section.1}}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}\hskip -1em.~Methodology}{2}{section.2}\protected@file@percent }
+\newlabel{sec:methodology}{{2}{2}{\texorpdfstring {\hskip -1em.~}{}Methodology}{section.2}{}}
+\newlabel{sec:methodology@cref}{{[section][2][]2}{[1][2][]2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}\hskip -1em.~Architectural Baselines}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{brf}{\backcite{cheng2021maskformer}{{2}{2.1}{subsection.2.1}}}
+\@writefile{brf}{\backcite{cheng2022mask2former}{{2}{2.1}{subsection.2.1}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}\hskip -1em.~Post-Hoc Anomaly Scoring}{2}{subsection.2.2}\protected@file@percent }
+\citation{nayal2023rba}
+\@writefile{brf}{\backcite{hendrycks2022scaling}{{3}{2.2}{subsection.2.2}}}
+\@writefile{brf}{\backcite{nayal2023rba}{{3}{2.2}{subsection.2.2}}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}\hskip -1em.~Diagnostic Analysis}{3}{section.3}\protected@file@percent }
+\newlabel{sec:diagnostic}{{3}{3}{\texorpdfstring {\hskip -1em.~}{}Diagnostic Analysis}{section.3}{}}
+\newlabel{sec:diagnostic@cref}{{[section][3][]3}{[1][3][]3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}\hskip -1em.~Semantic and Spatial Vulnerabilities}{3}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}\hskip -1em.~Object Typology: The Scale Paradox vs. The Scale Gap}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Boundary Uncertainty in ERFNet. The False Positive Rate (FPR95) dramatically increases at semantic boundaries compared to flat regions, creating critical blind spots for anomaly detection.}}{3}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:boundary_uncertainty}{{1}{3}{Boundary Uncertainty in ERFNet. The False Positive Rate (FPR95) dramatically increases at semantic boundaries compared to flat regions, creating critical blind spots for anomaly detection}{figure.caption.2}{}}
+\newlabel{fig:boundary_uncertainty@cref}{{[figure][1][]1}{[1][3][]3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Depth-dependent Vertical Blindness. Heatmap analysis on RoadAnomaly21 reveals that EoMT detection performance collapses for objects in the far distance, reacting only when anomalies are in the immediate vicinity.}}{3}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:depth_blindness}{{2}{3}{Depth-dependent Vertical Blindness. Heatmap analysis on RoadAnomaly21 reveals that EoMT detection performance collapses for objects in the far distance, reacting only when anomalies are in the immediate vicinity}{figure.caption.3}{}}
+\newlabel{fig:depth_blindness@cref}{{[figure][2][]2}{[1][3][]3}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Baseline Anomaly Segmentation Results. Performance metrics (AuPRC and FPR95) across five datasets for ERFNet and EoMT using standard and mask-specific post-hoc methods. \textit  {Best t} for Temperature Scaling is set to $t=1.1$.}}{4}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:baselines}{{1}{4}{Baseline Anomaly Segmentation Results. Performance metrics (AuPRC and FPR95) across five datasets for ERFNet and EoMT using standard and mask-specific post-hoc methods. \textit {Best t} for Temperature Scaling is set to $t=1.1$}{table.caption.1}{}}
+\newlabel{tab:baselines@cref}{{[table][1][]1}{[1][3][]4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces The Scale Gap in Vision Transformers. Evaluating EoMT on FS Static demonstrates a binary behavior: near-zero AuPRC for small objects, contrasting with strong detection capabilities for massive obstacles.}}{4}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:scale_gap}{{3}{4}{The Scale Gap in Vision Transformers. Evaluating EoMT on FS Static demonstrates a binary behavior: near-zero AuPRC for small objects, contrasting with strong detection capabilities for massive obstacles}{figure.caption.4}{}}
+\newlabel{fig:scale_gap@cref}{{[figure][3][]3}{[1][3][]4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}\hskip -1em.~Taxonomic Absorption and Attention Failure}{4}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}\hskip -1em.~Proposed Strategy}{4}{section.4}\protected@file@percent }
+\newlabel{sec:strategy}{{4}{4}{\texorpdfstring {\hskip -1em.~}{}Proposed Strategy}{section.4}{}}
+\newlabel{sec:strategy@cref}{{[section][4][]4}{[1][4][]4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Taxonomic Absorption in ERFNet. Anomalies are frequently misclassified into familiar In-Distribution categories (e.g., Train, Car), neutralizing the Out-of-Distribution score.}}{4}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:taxonomic_absorption}{{4}{4}{Taxonomic Absorption in ERFNet. Anomalies are frequently misclassified into familiar In-Distribution categories (e.g., Train, Car), neutralizing the Out-of-Distribution score}{figure.caption.5}{}}
+\newlabel{fig:taxonomic_absorption@cref}{{[figure][4][]4}{[1][4][]4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Attention Map Failure in EoMT. The Vision Transformer's attention weights bypass small-scale anomalies, converging entirely on dominant background classes like Vegetation or Building.}}{4}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:attention_failure}{{5}{4}{Attention Map Failure in EoMT. The Vision Transformer's attention weights bypass small-scale anomalies, converging entirely on dominant background classes like Vegetation or Building}{figure.caption.6}{}}
+\newlabel{fig:attention_failure@cref}{{[figure][5][]5}{[1][4][]4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}\hskip -1em.~Perspective-Aware Outlier Exposure}{5}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}\hskip -1em.~Entropy and Logit Norm Regulation}{5}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}\hskip -1em.~Efficient Decoder-Only Fine-Tuning}{5}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}\hskip -1em.~Fine-Tuning with Cut-and-Paste Outlier Exposure}{5}{section.5}\protected@file@percent }
+\newlabel{sec:finetuning}{{5}{5}{\texorpdfstring {\hskip -1em.~}{}Fine-Tuning with Cut-and-Paste Outlier Exposure}{section.5}{}}
+\newlabel{sec:finetuning@cref}{{[section][5][]5}{[1][5][]5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}\hskip -1em.~Outlier Injection Strategy}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{COCO Object Cutouts.}{5}{section*.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Scale Prior.}{5}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Perspective-Aware Placement.}{6}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Photometric Blending.}{6}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}\hskip -1em.~Optimization Objective}{6}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}\hskip -1em.~Empirical Behavior of the Fine-Tuned Model}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Aggregate trade-off.}{6}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fine-grained effects.}{6}{section*.13}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Effect of cut-and-paste outlier exposure on EoMT. We compare the original EoMT checkpoint against the fine-tuned checkpoint used for the new analysis. Mean AuPRC and Mean FPR95 are averaged over the five OoD benchmarks. Higher AuPRC and lower FPR95 are better.}}{7}{table.caption.11}\protected@file@percent }
+\newlabel{tab:finetuning_summary}{{2}{7}{Effect of cut-and-paste outlier exposure on EoMT. We compare the original EoMT checkpoint against the fine-tuned checkpoint used for the new analysis. Mean AuPRC and Mean FPR95 are averaged over the five OoD benchmarks. Higher AuPRC and lower FPR95 are better}{table.caption.11}{}}
+\newlabel{tab:finetuning_summary@cref}{{[table][2][]2}{[1][6][]7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}\hskip -1em.~Summary}{7}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}\hskip -1em.~Conclusion and Future Work}{7}{section.6}\protected@file@percent }
+\newlabel{sec:conclusion}{{6}{7}{\texorpdfstring {\hskip -1em.~}{}Conclusion and Future Work}{section.6}{}}
+\newlabel{sec:conclusion@cref}{{[section][6][]6}{[1][7][]7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}\hskip -1em.~Conclusions}{7}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}\hskip -1em.~Future Work}{7}{subsection.6.2}\protected@file@percent }
+\citation{hu2022lora}
+\bibstyle{ieeenat_fullname}
+\bibdata{main}
+\bibcite{blum2019fishyscapes}{{1}{2019}{{Blum et~al.}}{{Blum, Sarlin, Nieto, Siegwart, and Cadena}}}
+\bibcite{chan2021segmentmeifyoucan}{{2}{2021}{{Chan et~al.}}{{Chan, Rottmann, and Gottschalk}}}
+\bibcite{cheng2021maskformer}{{3}{2021}{{Cheng et~al.}}{{Cheng, Schwing, and Kirillov}}}
+\bibcite{cheng2022mask2former}{{4}{2022}{{Cheng et~al.}}{{Cheng, Misra, Schwing, Kirillov, and Girdhar}}}
+\bibcite{hendrycks2022scaling}{{5}{2022}{{Hendrycks et~al.}}{{Hendrycks, Basart, Mazeika, Zou, Kwon, Mostajabi, Steinhardt, and Song}}}
+\bibcite{hu2022lora}{{6}{2022}{{Hu et~al.}}{{Hu, Shen, Wallis, Allen-Zhu, Li, Wang, Wang, and Chen}}}
+\bibcite{kerssies2025eomt}{{7}{2025}{{Kerssies et~al.}}{{Kerssies, Cavagnero, Hermans, Norouzi, Averta, Leibe, Dubbelman, and de~Geus}}}
+\bibcite{nayal2023rba}{{8}{2023}{{Nayal et~al.}}{{Nayal, Yavuz, Henriques, and G{\"u}ney}}}
+\bibcite{oquab2023dinov2}{{9}{2023}{{Oquab et~al.}}{{Oquab, Darcet, Moutakanni, Vo, Szafraniec, Khalidov, Fernandez, Haziza, Massa, El-Nouby, et~al.}}}
+\bibcite{romera2018erfnet}{{10}{2018}{{Romera et~al.}}{{Romera, Alvarez, Bergasa, and Arroyo}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Aggregate and fine-grained behavior of the fine-tuned EoMT checkpoint. Outlier exposure lowers mean FPR95 for every post-hoc score and improves MaxLogit/RbA mean AuPRC, but the detailed diagnostics show that the gains are dataset-dependent: small RoadObstacle21 objects and Fishyscapes Static boundaries improve, while RoadAnomaly21 boundary behavior regresses.}}{8}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:finetuned_analysis}{{6}{8}{Aggregate and fine-grained behavior of the fine-tuned EoMT checkpoint. Outlier exposure lowers mean FPR95 for every post-hoc score and improves MaxLogit/RbA mean AuPRC, but the detailed diagnostics show that the gains are dataset-dependent: small RoadObstacle21 objects and Fishyscapes Static boundaries improve, while RoadAnomaly21 boundary behavior regresses}{figure.caption.14}{}}
+\newlabel{fig:finetuned_analysis@cref}{{[figure][6][]6}{[1][7][]8}}
+\@writefile{brf}{\backcite{hu2022lora}{{8}{6.2}{subsection.6.2}}}
+\gdef \@abspage@last{9}

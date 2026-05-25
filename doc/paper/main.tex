@@ -1,0 +1,56 @@
+% CVPR 2026 Paper Template; see https://github.com/cvpr-org/author-kit
+
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+%%%%%%%%% PAPER TYPE
+% Use the CVPR layout with page numbers, but without review-only line numbers or
+% confidential watermarks.
+\usepackage[pagenumbers]{cvpr}
+\usepackage{multirow}
+
+% Import additional packages in the preamble file, before hyperref
+\input{preamble}
+
+% It is strongly recommended to use hyperref, especially for the review version.
+% hyperref with option pagebackref eases the reviewers' job.
+% Please disable hyperref *only* if you encounter grave issues, 
+% e.g. with the file validation for the camera-ready version.
+%
+% If you comment hyperref and then uncomment it, you should delete *.aux before re-running LaTeX.
+% (Or just hit 'q' on the first LaTeX run, let it finish, and you should be clear).
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
+
+%%%%%%%%% PAPER ID  - PLEASE UPDATE
+\def\paperID{0000}
+\def\confName{CVPR}
+\def\confYear{2026}
+
+%%%%%%%%% TITLE - PLEASE UPDATE
+\title{Mask Architecture Anomaly Segmentation for Road Scenes: \\A Diagnostic Analysis of CNNs vs Vision Transformers}
+
+%%%%%%%%% AUTHORS
+\author{Advanced Machine Learning Project\\[0.75em]
+Stefano Zizzi \quad Federico Tumolo \quad Francesco Fabrizi \quad Lorenzo Aprile}
+
+\begin{document}
+\maketitle
+\input{sec/0_abstract}    
+\input{sec/1_intro}
+\input{sec/2_methodology}
+\input{sec/3_diagnostic_analysis}
+\input{sec/4_proposed_strategy}
+\input{sec/5_model_fine_tuning}
+\input{sec/6_conclusion_and_future_work}
+%\input{sec/2_formatting}
+%\input{sec/3_finalcopy}
+{
+    \small
+    \bibliographystyle{ieeenat_fullname}
+    \bibliography{main}
+}
+
+% WARNING: do not forget to delete the supplementary pages from your submission 
+% \input{sec/X_suppl}
+
+\end{document}

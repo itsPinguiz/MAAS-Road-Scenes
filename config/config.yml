@@ -5,8 +5,8 @@
 # Pipeline Execution Flags
 # =============================================================================
 pipeline:
-  run_erfnet: false
-  run_eomt: true
+  run_erfnet: true
+  run_eomt: false
 
 paths:
   # Override root for Google Colab (ignored when running locally)
@@ -46,7 +46,7 @@ eval:
   temperatures: [0.5, 0.75, 1.1]
   num_classes: 20
   ignore_index: 19
-  save_logits: false
+  save_logits: true
 
 # =============================================================================
 # Analysis parameters

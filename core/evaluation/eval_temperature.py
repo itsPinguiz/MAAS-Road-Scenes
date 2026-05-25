@@ -27,7 +27,46 @@ from core.utility.update_table_t import update_table_t_entry
 from core.utility.logger import logger, console
 from ood_metrics import fpr_at_95_tpr
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
-from torchmetrics import JaccardIndex
+
+
+class StreamingMeanIoU:
+    """Multiclass mIoU accumulator."""
+
+    def __init__(self, num_classes, ignore_index=255, device="cpu"):
+        self.num_classes = num_classes
+        self.ignore_index = ignore_index
+        self.confmat = torch.zeros(
+            (num_classes, num_classes),
+            dtype=torch.float64,
+            device=device,
+        )
+
+    def update(self, preds, target):
+        preds = preds.reshape(-1).long()
+        target = target.reshape(-1).long()
+        valid = (
+            (target != self.ignore_index)
+            & (target >= 0)
+            & (target < self.num_classes)
+            & (preds >= 0)
+            & (preds < self.num_classes)
+        )
+        if not torch.any(valid):
+            return
+
+        indices = target[valid] * self.num_classes + preds[valid]
+        bins = torch.bincount(indices, minlength=self.num_classes ** 2)
+        self.confmat += bins.reshape(self.num_classes, self.num_classes)
+
+    def compute(self):
+        true_positive = torch.diag(self.confmat)
+        false_positive = self.confmat.sum(dim=0) - true_positive
+        false_negative = self.confmat.sum(dim=1) - true_positive
+        union = true_positive + false_positive + false_negative
+        valid = union > 0
+        if not torch.any(valid):
+            return torch.tensor(0.0, device=self.confmat.device)
+        return (true_positive[valid] / union[valid]).mean()
 
 def get_msp_score(logits, T, device):
     """Compute MSP anomaly scores after temperature scaling."""
@@ -124,10 +163,13 @@ def main():
                 
                 if auprc > best_metrics["auprc"]:
                     best_metrics.update({"auprc": auprc, "fpr95": fpr95, "t": T})
+
+            if best_metrics["t"] is not None:
+                update_table_t_entry(args.model, "MSP (best t)", ds_name,
+                                     f"{best_metrics['auprc']:.2f}", f"{best_metrics['fpr95']:.2f}")
         
         if ds_name == 'Cityscapes' and logit_files:
-            T_ref = 1.0
-            metric = JaccardIndex(task="multiclass", num_classes=19, ignore_index=255).to(device)
+            metric = StreamingMeanIoU(num_classes=19, ignore_index=255, device=device)
             
             for l_path in logit_files:
                 logits = torch.load(l_path, map_location=device).to(device)
@@ -170,10 +212,6 @@ def main():
             for T in TEMPS:
                 update_table_t_entry(args.model, f"MSP (t = {T})", miou=f"{miou:.2f}")
             update_table_t_entry(args.model, "MSP (best t)", miou=f"{miou:.2f}")
-
-        if best_metrics["t"] is not None:
-            update_table_t_entry(args.model, "MSP (best t)", ds_name, 
-                                 f"{best_metrics['auprc']:.2f}", f"{best_metrics['fpr95']:.2f}")
 
 if __name__ == "__main__":
     main()

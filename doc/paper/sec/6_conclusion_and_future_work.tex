@@ -1,0 +1,28 @@
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+\subsection{Conclusions}
+
+In this work, we investigated a cut-and-paste outlier exposure strategy for improving out-of-distribution (OOD) detection in semantic segmentation models. The approach leverages real object instances from COCO and integrates them into road-scene images using structured augmentation priors, namely scale, perspective, and road-placement priors.
+
+The fine-tuning procedure combines standard semantic segmentation supervision with an additional OOD objective applied to synthetic anomaly regions. This formulation allows the model to be explicitly exposed to object-level anomalies while preserving its ability to perform in-distribution segmentation, aided by the use of a frozen encoder.
+
+Experimental results across multiple benchmarks, including Lost\&Found, Fishyscapes, Road Anomaly, Road Anomaly 21, and Road Obstacle 21, show changes in OOD detection performance after fine-tuning. Improvements are most visible in false-positive suppression and in small-obstacle behavior on RoadObstacle21, while RoadAnomaly and RoadAnomaly21 reveal clear regressions. Performance therefore varies across datasets, indicating that the effectiveness of synthetic outlier exposure depends strongly on scene structure and anomaly characteristics.
+
+Overall, the study suggests that cut-and-paste outlier exposure can be a practical mechanism for improving OOD awareness in segmentation models without architectural modifications, although its impact is not uniform across all evaluation settings.
+
+\subsection{Future Work}
+
+Several directions could be explored to extend this work.
+
+First, the current cut-and-paste mechanism could be improved by incorporating more realistic compositing techniques. In particular, learning-based blending or diffusion-based inpainting could reduce the domain gap between synthetic and real anomalies.
+
+Second, the object and placement sampling distributions are currently fixed by hand. More principled approaches could be explored, such as learning the sampling distribution jointly with the model or conditioning pasted object category, scale, and position on scene context.
+
+Third, the spatial prior relies on handcrafted perspective assumptions. This could be replaced or complemented by depth estimation models to provide more accurate geometric placement of objects.
+
+Fourth, while the encoder is frozen in this work to preserve pretrained representations, partial or progressive unfreezing strategies could be investigated to assess potential gains in adaptation capacity.
+
+Fifth, parameter-efficient adaptation methods such as LoRA~\cite{hu2022lora} could be explored to tune selected attention or prediction-head weights under limited compute budgets.
+
+Finally, evaluation could be extended beyond current benchmarks to include more diverse and real-world driving scenarios, particularly those with complex weather conditions or long-tail object distributions, to better assess robustness in practical deployments.

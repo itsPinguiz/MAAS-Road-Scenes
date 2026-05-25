@@ -1,0 +1,82 @@
+\begin{thebibliography}{10}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Blum et~al.(2019)Blum, Sarlin, Nieto, Siegwart, and
+  Cadena]{blum2019fishyscapes}
+Hermann Blum, Paul-Edouard Sarlin, Juan Nieto, Roland Siegwart, and Cesar
+  Cadena.
+\newblock The fishyscapes benchmark: Measuring blind spots in semantic
+  segmentation.
+\newblock In \emph{ICCV Workshops}, 2019.
+
+\bibitem[Chan et~al.(2021)Chan, Rottmann, and
+  Gottschalk]{chan2021segmentmeifyoucan}
+Robin Chan, Matthias Rottmann, and Hanno Gottschalk.
+\newblock Segmentmeifyoucan: A benchmark for anomaly segmentation.
+\newblock In \emph{NeurIPS Datasets and Benchmarks}, 2021.
+
+\bibitem[Cheng et~al.(2021)Cheng, Schwing, and Kirillov]{cheng2021maskformer}
+Bowen Cheng, Alexander~G. Schwing, and Alexander Kirillov.
+\newblock Per-pixel classification is not all you need for semantic
+  segmentation.
+\newblock In \emph{Advances in Neural Information Processing Systems}, 2021.
+
+\bibitem[Cheng et~al.(2022)Cheng, Misra, Schwing, Kirillov, and
+  Girdhar]{cheng2022mask2former}
+Bowen Cheng, Ishan Misra, Alexander~G. Schwing, Alexander Kirillov, and Rohit
+  Girdhar.
+\newblock Masked-attention mask transformer for universal image segmentation.
+\newblock In \emph{Proceedings of the IEEE/CVF Conference on Computer Vision
+  and Pattern Recognition}, pages 1290--1299, 2022.
+
+\bibitem[Hendrycks et~al.(2022)Hendrycks, Basart, Mazeika, Zou, Kwon,
+  Mostajabi, Steinhardt, and Song]{hendrycks2022scaling}
+Dan Hendrycks, Steven Basart, Mantas Mazeika, Andy Zou, Joseph Kwon,
+  Mohammadreza Mostajabi, Jacob Steinhardt, and Dawn Song.
+\newblock Scaling out-of-distribution detection for real-world settings.
+\newblock In \emph{Proceedings of the 39th International Conference on Machine
+  Learning}, pages 8759--8773, 2022.
+
+\bibitem[Hu et~al.(2022)Hu, Shen, Wallis, Allen-Zhu, Li, Wang, Wang, and
+  Chen]{hu2022lora}
+Edward~J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean
+  Wang, Lu Wang, and Weizhu Chen.
+\newblock Lora: Low-rank adaptation of large language models.
+\newblock In \emph{International Conference on Learning Representations}, 2022.
+
+\bibitem[Kerssies et~al.(2025)Kerssies, Cavagnero, Hermans, Norouzi, Averta,
+  Leibe, Dubbelman, and de~Geus]{kerssies2025eomt}
+Tommie Kerssies, Niccol{\`o} Cavagnero, Alexander Hermans, Narges Norouzi,
+  Giuseppe Averta, Bastian Leibe, Gijs Dubbelman, and Daan de Geus.
+\newblock Your vit is secretly an image segmentation model.
+\newblock In \emph{Proceedings of the IEEE/CVF Conference on Computer Vision
+  and Pattern Recognition}, pages 25303--25313, 2025.
+
+\bibitem[Nayal et~al.(2023)Nayal, Yavuz, Henriques, and
+  G{\"u}ney]{nayal2023rba}
+Nazir Nayal, M{\i}sra Yavuz, Jo{\~a}o~F. Henriques, and Fatma G{\"u}ney.
+\newblock Rba: Segmenting unknown regions rejected by all.
+\newblock In \emph{Proceedings of the IEEE/CVF International Conference on
+  Computer Vision}, 2023.
+
+\bibitem[Oquab et~al.(2023)Oquab, Darcet, Moutakanni, Vo, Szafraniec, Khalidov,
+  Fernandez, Haziza, Massa, El-Nouby, et~al.]{oquab2023dinov2}
+Maxime Oquab, Timoth{\'e}e Darcet, Th{\'e}o Moutakanni, Huy Vo, Marc
+  Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa,
+  Alaaeldin El-Nouby, et~al.
+\newblock Dinov2: Learning robust visual features without supervision.
+\newblock \emph{arXiv preprint arXiv:2304.07193}, 2023.
+
+\bibitem[Romera et~al.(2018)Romera, Alvarez, Bergasa, and
+  Arroyo]{romera2018erfnet}
+Eduardo Romera, Jose~M. Alvarez, Luis~M. Bergasa, and Roberto Arroyo.
+\newblock Erfnet: Efficient residual factorized convnet for real-time semantic
+  segmentation.
+\newblock \emph{IEEE Transactions on Intelligent Transportation Systems},
+  19\penalty0 (1):\penalty0 263--272, 2018.
+
+\end{thebibliography}

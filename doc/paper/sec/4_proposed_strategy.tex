@@ -1,0 +1,35 @@
+\section{Proposed Strategy}
+\label{sec:strategy}
+
+Driven by the empirical evidence of the diagnostic analysis, we investigate a targeted strategy for adapting Vision Transformers to road-scene anomalies. The strategy combines Cut-and-Paste Outlier Exposure with perspective-aware placement, entropy/logit-norm regularization, and lightweight decoder-side fine-tuning. Our goal is not to modify the EoMT architecture, but to test whether synthetic object-level anomalies can improve OoD awareness while preserving closed-set segmentation.
+
+\subsection{Perspective-Aware Outlier Exposure}
+
+To target the Scale Gap and Vertical Blindness without incurring the computational penalty of high-resolution inference, we deploy a synthetically augmented data distribution using Cut-and-Paste outlier exposure. This process is governed by hand-designed priors motivated by the diagnostic analysis:
+
+\begin{itemize}
+    \item \textbf{Perspective Scaling:} To address Vertical Blindness, we simulate distance by scaling pasted outliers as a function of their vertical position in the frame ($y$-coordinate). Anomalies placed closer to the vanishing point are aggressively shrunk using a power-law perspective strength, forcing the network to detect distant, sub-patch anomalies.
+    
+    \item \textbf{Bimodal Scale Sampling:} To explicitly target the Scale Gap, our augmentation probabilistically favors extremely small scales. By dedicating the vast majority of pasted samples to a reduced scale range, we prevent the tokenization process from diluting high-frequency details, forcing the ViT to extract discriminative features from small objects.
+    
+    \item \textbf{Road-Biased Placement:} In the reported configuration, anomalies are preferentially pasted on road pixels in the lower image region. This targets the safety-critical drivable area and avoids over-sampling visually implausible object placements. The implementation also supports boundary-aware placement near critical classes such as Building, Wall, Fence, Pole, Vegetation, and Terrain, but this option is disabled in the final reported run.
+    
+    \item \textbf{Edge Feathering:} To reduce sharp artificial boundaries around pasted objects, we apply Gaussian smoothing to the cutout alpha mask. Global noise injection is supported by the implementation but disabled in the reported configuration to avoid teaching a synthetic noise shortcut.
+\end{itemize}
+
+\subsection{Entropy and Logit Norm Regulation}
+
+While Outlier Exposure introduces anomalies during training, the network requires a specialized objective to learn uncertainty. We introduce a combined loss function that optimizes In-Distribution (ID) accuracy while explicitly penalizing confident predictions on Out-of-Distribution (OoD) pixels.
+
+\textbf{Max Entropy Loss:} For pixels belonging to pasted outliers, we apply a Maximum Entropy loss ($\mathcal{L}_{\text{entropy}}$) that pushes the softmax probabilities toward a uniform distribution. This discourages any single known class from dominating the prediction for unknown objects.
+
+\textbf{Logit Norm Penalty:} Softmax entropy alone can be bypassed if the network learns to scale up logit magnitudes symmetrically. To combat this, we introduce an energy constraint ($\mathcal{L}_{\text{logit\_norm}}$) that penalizes the $L_2$ norm of the raw logits for OoD pixels. By minimizing the logit magnitudes, we suppress overconfidence before the softmax bottleneck.
+
+The total objective balances the standard Cross-Entropy loss ($\mathcal{L}_{\text{CE}}$) on clean pixels with the combined OoD regularization on pasted pixels:
+\begin{equation}
+    \mathcal{L} = \mathcal{L}_{\text{CE}} + \lambda_1 \mathcal{L}_{\text{entropy}} + \lambda_2 \mathcal{L}_{\text{logit\_norm}}
+\end{equation}
+
+\subsection{Efficient Decoder-Only Fine-Tuning}
+
+To maintain the robust, open-world feature extraction capabilities of the Vision Transformer, we employ an efficient fine-tuning strategy. We freeze the pre-trained DINOv2 encoder backbone entirely. This prevents catastrophic forgetting of the powerful self-supervised representations that enable zero-shot generalization. The remaining segmentation components are updated under the proposed outlier exposure and loss formulation, allowing the model to adapt its uncertainty estimates without retraining the full backbone.

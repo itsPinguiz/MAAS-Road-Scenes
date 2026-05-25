@@ -1,0 +1,14 @@
+\backcite {romera2018erfnet}{{1}{1}{section.1}}
+\backcite {cheng2021maskformer}{{1}{1}{section.1}}
+\backcite {cheng2022mask2former}{{1}{1}{section.1}}
+\backcite {kerssies2025eomt}{{1}{1}{section.1}}
+\backcite {oquab2023dinov2}{{1}{1}{section.1}}
+\backcite {blum2019fishyscapes}{{1}{1}{section.1}}
+\backcite {chan2021segmentmeifyoucan}{{1}{1}{section.1}}
+\backcite {hendrycks2022scaling}{{2}{1}{section.1}}
+\backcite {nayal2023rba}{{2}{1}{section.1}}
+\backcite {cheng2021maskformer}{{2}{2.1}{subsection.2.1}}
+\backcite {cheng2022mask2former}{{2}{2.1}{subsection.2.1}}
+\backcite {hendrycks2022scaling}{{3}{2.2}{subsection.2.2}}
+\backcite {nayal2023rba}{{3}{2.2}{subsection.2.2}}
+\backcite {hu2022lora}{{8}{6.2}{subsection.6.2}}

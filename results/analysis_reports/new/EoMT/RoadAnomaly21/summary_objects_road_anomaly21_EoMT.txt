@@ -5,29 +5,27 @@ Size: Small
   maxlogit  : nan%
   maxentropy: nan%
 Size: Medium
-  msp       : 13.21%
-  maxlogit  : 13.25%
-  maxentropy: 16.46%
+  msp       : 10.35%
+  maxlogit  : 26.85%
+  maxentropy: 6.34%
 Size: Large
-  msp       : 85.62%
-  maxlogit  : 86.17%
-  maxentropy: 86.76%
+  msp       : 36.41%
+  maxlogit  : 36.58%
+  maxentropy: 30.72%
 
 Class Prediction on OOD Pixels:
-  road           : 27.4%
-  sidewalk       : 1.3%
-  building       : 5.5%
+  road           : 5.2%
+  sidewalk       : 1.8%
+  building       : 4.3%
   fence          : 0.0%
-  pole           : 0.6%
+  pole           : 0.7%
   traffic sign   : 0.0%
-  vegetation     : 2.6%
-  terrain        : 7.9%
-  sky            : 0.6%
-  person         : 0.7%
-  rider          : 0.2%
-  car            : 6.3%
-  truck          : 46.5%
-  bus            : 0.0%
-  train          : 0.0%
-  motorcycle     : 0.2%
-  bicycle        : 0.1%
+  vegetation     : 0.7%
+  terrain        : 0.0%
+  sky            : 1.3%
+  car            : 0.0%
+  truck          : 34.2%
+  bus            : 8.0%
+  train          : 31.5%
+  motorcycle     : 11.1%
+  bicycle        : 1.1%

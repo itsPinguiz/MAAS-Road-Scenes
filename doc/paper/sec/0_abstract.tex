@@ -1,0 +1,7 @@
+\begin{abstract}
+The deployment of deep neural networks in autonomous driving critically depends on detecting Out-of-Distribution (OoD) objects. While recent semantic segmentation models achieve high In-Distribution accuracy, their vulnerability to road anomalies remains poorly understood beyond global metrics.
+
+In this paper we present a diagnostic analysis contrasting pixel-based CNNs (ERFNet) and mask-based Vision Transformers (EoMT with DINOv2 backbone) across multiple benchmarks (SMIYC, Fishyscapes, Road Anomaly) using standard and mask-specific post-hoc scoring.
+
+Moving beyond aggregate statistics, our spatial, depth, and scale-based investigation reveals systemic weaknesses shared by both paradigms: severe Boundary Uncertainty near thin structures (ERFNet's FPR95 degrades from 61.94\% on flat regions to 90.43\% on boundaries), depth-dependent Vertical Blindness (EoMT AuPRC $<$ 9.58\% in far depth band B0), and Taxonomic Absorption of anomalies into known classes. Crucially, we uncover diametrically opposed scale-dependent failure modes: CNNs exhibit a Scale Paradox, with performance degrading sharply on massive anomalies, while ViTs show a Scale Gap, effectively acting as a low-pass filter that suppresses small-scale debris. Driven by these empirical insights, we investigate a targeted Cut-and-Paste Outlier Exposure strategy and show that it improves some small-obstacle and false-positive regimes, while remaining sensitive to dataset-specific anomaly structure.
+\end{abstract}
